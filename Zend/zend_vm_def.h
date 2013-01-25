@@ -970,6 +970,25 @@ ZEND_VM_HANDLER(37, ZEND_POST_DEC, VAR|CV, ANY)
 	ZEND_VM_NEXT_OPCODE();
 }
 
+ZEND_VM_HANDLER(151, ZEND_ECHO_ESCAPE, CONST|TMP|VAR|CV, ANY)
+{
+	zend_op *opline = EX(opline);
+	zend_free_op free_op1;
+	zval z_copy;
+	zval *z = GET_OP1_ZVAL_PTR(BP_VAR_R);
+
+	if (Z_TYPE_P(z) == IS_OBJECT && Z_OBJ_HT_P(z)->get_method != NULL &&
+		zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
+		zend_print_variable_escape(&z_copy);
+		zval_dtor(&z_copy);
+	} else {
+		zend_print_variable_escape(z);
+	}
+
+	FREE_OP1();
+	ZEND_VM_NEXT_OPCODE();
+}
+
 ZEND_VM_HANDLER(40, ZEND_ECHO, CONST|TMP|VAR|CV, ANY)
 {
 	USE_OPLINE
@@ -1006,7 +1025,7 @@ ZEND_VM_HANDLER(41, ZEND_PRINT, CONST|TMP|VAR|CV, ANY)
 	USE_OPLINE
 
 	ZVAL_LONG(&EX_T(opline->result.var).tmp_var, 1);
-	ZEND_VM_DISPATCH_TO_HANDLER(ZEND_ECHO);
+	ZEND_VM_DISPATCH_TO_HANDLER(ZEND_ECHO_ESCAPE);
 }
 
 ZEND_VM_HELPER_EX(zend_fetch_var_address_helper, CONST|TMP|VAR|CV, UNUSED|CONST|VAR, int type)

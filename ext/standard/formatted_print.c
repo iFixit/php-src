@@ -689,6 +689,42 @@ PHP_FUNCTION(vsprintf)
 }
 /* }}} */
 
+/* {{{ proto static int escape_write(char *s, int len)
+   Helper function for output string with esaping html entities */
+static int
+escape_write(char *s, int len)
+{
+	int rlen;
+	zval *argp, *quote_type_p, *retval;
+	zval **params[2];
+	zval htmlspecialchars, arg, quote_type;
+
+	INIT_ZVAL(htmlspecialchars);
+	ZVAL_STRING(&htmlspecialchars, "htmlspecialchars", 0);
+
+	INIT_ZVAL(arg);
+	INIT_ZVAL(quote_type);
+	argp = &arg;
+	ZVAL_STRINGL(argp, s, len, 0);
+	quote_type_p = &quote_type;
+	ZVAL_LONG(quote_type_p, 3);		/* ENT_QUOTES */
+
+	params[0] = &argp;
+	params[1] = &quote_type_p;
+	if (call_user_function_ex(CG(function_table), NULL, &htmlspecialchars, &retval, 2, params, 0, NULL TSRMLS_CC) == SUCCESS) {
+		rlen = PHPWRITE(Z_STRVAL_P(retval), Z_STRLEN_P(retval));
+	} else {
+		zend_error(E_ERROR, "htmlspecialchars failed");
+		rlen = 0;
+	}
+
+	if (retval) {
+		zval_ptr_dtor(&retval);
+	}
+	return rlen;
+}
+/* }}} */
+
 /* {{{ proto int printf(string format [, mixed arg1 [, mixed ...]])
    Output a formatted string */
 PHP_FUNCTION(user_printf)
@@ -699,7 +735,11 @@ PHP_FUNCTION(user_printf)
 	if ((result=php_formatted_print(ht, &len, 0, 0 TSRMLS_CC))==NULL) {
 		RETURN_FALSE;
 	}
-	rlen = PHPWRITE(result, len);
+	if (EG(__auto_escape)) {
+		rlen = escape_write(result, len);
+	} else {
+		rlen = PHPWRITE(result, len);
+	}
 	efree(result);
 	RETURN_LONG(rlen);
 }
@@ -715,7 +755,11 @@ PHP_FUNCTION(vprintf)
 	if ((result=php_formatted_print(ht, &len, 1, 0 TSRMLS_CC))==NULL) {
 		RETURN_FALSE;
 	}
-	rlen = PHPWRITE(result, len);
+	if (EG(__auto_escape)) {
+		rlen = escape_write(result, len);
+	} else {
+		rlen = PHPWRITE(result, len);
+	}
 	efree(result);
 	RETURN_LONG(rlen);
 }

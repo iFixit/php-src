@@ -679,8 +679,8 @@ class_constant_declaration:
 ;
 
 echo_expr_list:
-		echo_expr_list ',' expr { zend_do_echo(&$3 TSRMLS_CC); }
-	|	expr					{ zend_do_echo(&$1 TSRMLS_CC); }
+		echo_expr_list ',' expr { zend_do_echo_escape(&$3 TSRMLS_CC); }
+	|	expr					{ zend_do_echo_escape(&$1 TSRMLS_CC); }
 ;
 
 
