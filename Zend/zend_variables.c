@@ -162,6 +162,12 @@ ZEND_API void _zval_dtor_wrapper(zval *zvalue)
 }
 
 
+ZEND_API int zend_print_variable_escape(zval *var) /* {{{ */
+{
+	return zend_print_zval_escape(var, 0);
+}
+/* }}} */
+
 #if ZEND_DEBUG
 ZEND_API void _zval_copy_ctor_wrapper(zval *zvalue)
 {

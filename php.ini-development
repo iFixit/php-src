@@ -835,6 +835,13 @@ default_socket_timeout = 60
 ; http://php.net/auto-detect-line-endings
 ;auto_detect_line_endings = Off
 
+;;;;;;;;;;;;;;;;;
+; Auto escaping ;
+;;;;;;;;;;;;;;;;;
+
+; Whether to enable the auto escaping.
+;__auto_escape = Off
+
 ;;;;;;;;;;;;;;;;;;;;;;
 ; Dynamic Extensions ;
 ;;;;;;;;;;;;;;;;;;;;;;
