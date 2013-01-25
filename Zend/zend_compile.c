@@ -872,7 +872,7 @@ void zend_do_echo_escape(znode *arg TSRMLS_DC) /* {{{ */
 	zend_op *opline = get_next_op(CG(active_op_array) TSRMLS_CC);
 
 	opline->opcode = ZEND_ECHO_ESCAPE;
-	opline->op1 = *arg;
+	SET_NODE(opline->op1, arg);
 	SET_UNUSED(opline->op2);
 }
 /* }}} */

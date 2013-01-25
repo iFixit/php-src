@@ -2002,19 +2002,31 @@ static int ZEND_FASTCALL  ZEND_BOOL_NOT_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_A
 
 static int ZEND_FASTCALL  ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
-	zend_op *opline = EX(opline);
+	USE_OPLINE
 
 	zval z_copy;
-	zval *z = &opline->op1.u.constant;
+	zval *z;
 
-	if (Z_TYPE_P(z) == IS_OBJECT && Z_OBJ_HT_P(z)->get_method != NULL &&
-		zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
-		zend_print_variable_escape(&z_copy);
-		zval_dtor(&z_copy);
+	SAVE_OPLINE();
+	z = opline->op1.zv;
+
+	if (IS_CONST != IS_CONST &&
+	    UNEXPECTED(Z_TYPE_P(z) == IS_OBJECT) &&
+	    Z_OBJ_HT_P(z)->get_method != NULL) {
+	    if (IS_CONST == IS_TMP_VAR) {
+	    	INIT_PZVAL(z);
+	    }
+		if (zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
+			zend_print_variable_escape(&z_copy);
+			zval_dtor(&z_copy);
+		} else {
+			zend_print_variable(z);
+		}
 	} else {
 		zend_print_variable_escape(z);
 	}
 
+	CHECK_EXCEPTION();
 	ZEND_VM_NEXT_OPCODE();
 }
 
@@ -6366,20 +6378,32 @@ static int ZEND_FASTCALL  ZEND_BOOL_NOT_SPEC_TMP_HANDLER(ZEND_OPCODE_HANDLER_ARG
 
 static int ZEND_FASTCALL  ZEND_ECHO_ESCAPE_SPEC_TMP_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
-	zend_op *opline = EX(opline);
+	USE_OPLINE
 	zend_free_op free_op1;
 	zval z_copy;
-	zval *z = _get_zval_ptr_tmp(&opline->op1, EX(Ts), &free_op1 TSRMLS_CC);
+	zval *z;
 
-	if (Z_TYPE_P(z) == IS_OBJECT && Z_OBJ_HT_P(z)->get_method != NULL &&
-		zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
-		zend_print_variable_escape(&z_copy);
-		zval_dtor(&z_copy);
+	SAVE_OPLINE();
+	z = _get_zval_ptr_tmp(opline->op1.var, EX_Ts(), &free_op1 TSRMLS_CC);
+
+	if (IS_TMP_VAR != IS_CONST &&
+	    UNEXPECTED(Z_TYPE_P(z) == IS_OBJECT) &&
+	    Z_OBJ_HT_P(z)->get_method != NULL) {
+	    if (IS_TMP_VAR == IS_TMP_VAR) {
+	    	INIT_PZVAL(z);
+	    }
+		if (zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
+			zend_print_variable_escape(&z_copy);
+			zval_dtor(&z_copy);
+		} else {
+			zend_print_variable_escape(z);
+		}
 	} else {
 		zend_print_variable_escape(z);
 	}
 
 	zval_dtor(free_op1.var);
+	CHECK_EXCEPTION();
 	ZEND_VM_NEXT_OPCODE();
 }
 
@@ -10637,20 +10661,32 @@ static int ZEND_FASTCALL  ZEND_POST_DEC_SPEC_VAR_HANDLER(ZEND_OPCODE_HANDLER_ARG
 
 static int ZEND_FASTCALL  ZEND_ECHO_ESCAPE_SPEC_VAR_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
-	zend_op *opline = EX(opline);
+	USE_OPLINE
 	zend_free_op free_op1;
 	zval z_copy;
-	zval *z = _get_zval_ptr_var(&opline->op1, EX(Ts), &free_op1 TSRMLS_CC);
+	zval *z;
 
-	if (Z_TYPE_P(z) == IS_OBJECT && Z_OBJ_HT_P(z)->get_method != NULL &&
-		zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
-		zend_print_variable_escape(&z_copy);
-		zval_dtor(&z_copy);
+	SAVE_OPLINE();
+	z = _get_zval_ptr_var(opline->op1.var, EX_Ts(), &free_op1 TSRMLS_CC);
+
+	if (IS_VAR != IS_CONST &&
+	    UNEXPECTED(Z_TYPE_P(z) == IS_OBJECT) &&
+	    Z_OBJ_HT_P(z)->get_method != NULL) {
+	    if (IS_VAR == IS_TMP_VAR) {
+	    	INIT_PZVAL(z);
+	    }
+		if (zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
+			zend_print_variable_escape(&z_copy);
+			zval_dtor(&z_copy);
+		} else {
+			zend_print_variable_escape(z);
+		}
 	} else {
 		zend_print_variable_escape(z);
 	}
 
 	if (free_op1.var) {zval_ptr_dtor(&free_op1.var);};
+	CHECK_EXCEPTION();
 	ZEND_VM_NEXT_OPCODE();
 }
 
@@ -26555,19 +26591,31 @@ static int ZEND_FASTCALL  ZEND_POST_DEC_SPEC_CV_HANDLER(ZEND_OPCODE_HANDLER_ARGS
 
 static int ZEND_FASTCALL  ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
-	zend_op *opline = EX(opline);
+	USE_OPLINE
 
 	zval z_copy;
-	zval *z = _get_zval_ptr_cv(&opline->op1, EX(Ts), BP_VAR_R TSRMLS_CC);
+	zval *z;
 
-	if (Z_TYPE_P(z) == IS_OBJECT && Z_OBJ_HT_P(z)->get_method != NULL &&
-		zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
-		zend_print_variable_escape(&z_copy);
-		zval_dtor(&z_copy);
+	SAVE_OPLINE();
+	z = _get_zval_ptr_cv_BP_VAR_R(EX_CVs(), opline->op1.var TSRMLS_CC);
+
+	if (IS_CV != IS_CONST &&
+	    UNEXPECTED(Z_TYPE_P(z) == IS_OBJECT) &&
+	    Z_OBJ_HT_P(z)->get_method != NULL) {
+	    if (IS_CV == IS_TMP_VAR) {
+	    	INIT_PZVAL(z);
+	    }
+		if (zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
+			zend_print_variable_escape(&z_copy);
+			zval_dtor(&z_copy);
+		} else {
+			zend_print_variable_escape(z);
+		}
 	} else {
 		zend_print_variable_escape(z);
 	}
 
+	CHECK_EXCEPTION();
 	ZEND_VM_NEXT_OPCODE();
 }
 
