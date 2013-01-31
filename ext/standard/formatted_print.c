@@ -735,11 +735,7 @@ PHP_FUNCTION(user_printf)
 	if ((result=php_formatted_print(ht, &len, 0, 0 TSRMLS_CC))==NULL) {
 		RETURN_FALSE;
 	}
-	if (EG(__auto_escape)) {
-		rlen = escape_write(result, len);
-	} else {
-		rlen = PHPWRITE(result, len);
-	}
+	rlen = PHPWRITE(result, len);
 	efree(result);
 	RETURN_LONG(rlen);
 }
@@ -755,11 +751,7 @@ PHP_FUNCTION(vprintf)
 	if ((result=php_formatted_print(ht, &len, 1, 0 TSRMLS_CC))==NULL) {
 		RETURN_FALSE;
 	}
-	if (EG(__auto_escape)) {
-		rlen = escape_write(result, len);
-	} else {
-		rlen = PHPWRITE(result, len);
-	}
+	rlen = PHPWRITE(result, len);
 	efree(result);
 	RETURN_LONG(rlen);
 }
