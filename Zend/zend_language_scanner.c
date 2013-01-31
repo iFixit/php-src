@@ -1436,7 +1436,7 @@ yy43:
 		zendlval->value.str.len = yyleng;
 		zendlval->type = IS_STRING;
 		BEGIN(ST_IN_SCRIPTING);
-		return T_OPEN_TAG_WITH_ECHO;
+		return T_OPEN_TAG_WITH_ECHO_ESCAPE;
 	} else {
 		goto inline_char_handler;
 	}
@@ -1453,7 +1453,7 @@ yy45:
 	zendlval->value.str.len = yyleng;
 	zendlval->type = IS_STRING;
 	BEGIN(ST_IN_SCRIPTING);
-	return T_OPEN_TAG_WITH_ECHO;
+	return T_OPEN_TAG_WITH_ECHO_ESCAPE;
 }
 #line 1459 "Zend/zend_language_scanner.c"
 yy47:
