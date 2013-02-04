@@ -6654,6 +6654,9 @@ again:
 		case T_OPEN_TAG_WITH_ECHO:
 			retval = T_ECHO;
 			break;
+		case T_OPEN_TAG_WITH_ECHO_ESCAPE:
+			retval = T_ECHO_ESCAPE;
+			break;
 		case T_END_HEREDOC:
 			efree(Z_STRVAL(zendlval->u.constant));
 			break;
