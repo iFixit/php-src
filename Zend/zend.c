@@ -389,37 +389,15 @@ static int escape_write(const char *str, size_t len) /* {{{ */
 }
 /* }}} */
 
+
 ZEND_API int zend_print_zval_escape(zval *expr, int indent) /* {{{ */
 {
-	zval expr_copy;
-	int use_copy;
-	int ret, n;
-	char *p, *q, *end;
-
-	zend_make_printable_zval(expr, &expr_copy, &use_copy);
-	if (use_copy) {
-		expr = &expr_copy;
-	}
-	if (expr->value.str.len==0) { /* optimize away empty strings */
-		if (use_copy) {
-			zval_dtor(expr);
-		}
-		return 0;
-	}
-
 	if (EG(__auto_escape)) {
-		ret = escape_write(Z_STRVAL_P(expr), Z_STRLEN_P(expr));
+		return zend_print_zval_ex((zend_write_func_t) escape_write, expr, indent);
 	} else {
-		zend_write(expr->value.str.val, expr->value.str.len);
-		ret = expr->value.str.len;
+		return zend_print_zval_ex(zend_write, expr, indent);
 	}
-
-	if (use_copy) {
-		zval_dtor(expr);
-	}
-	return ret;
 }
-/* }}} */
 
 ZEND_API void zend_print_flat_zval_r(zval *expr TSRMLS_DC) /* {{{ */
 {
