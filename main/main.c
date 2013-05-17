@@ -1842,6 +1842,19 @@ static int php_output_wrapper(const char *str, uint str_length)
 }
 /* }}} */
 
+static int php_escape_write(const char *str, uint len) /* {{{ */
+{
+	size_t new_len;
+	char *escaped;
+ 
+	escaped = php_escape_html_entities(str, len, &new_len, 0, 3 /* ENT_QUOTES */, NULL TSRMLS_CC);
+	php_output_wrapper(escaped, new_len);
+	efree(escaped);
+
+	return new_len;
+}
+/* }}} */
+
 #ifdef ZTS
 /* {{{ core_globals_ctor
  */
@@ -1997,6 +2010,7 @@ int php_module_startup(sapi_module_struct *sf, zend_module_entry *additional_mod
 	zuf.error_function = php_error_cb;
 	zuf.printf_function = php_printf;
 	zuf.write_function = php_output_wrapper;
+	zuf.write_escape_function = php_escape_write;
 	zuf.fopen_function = php_fopen_wrapper_for_zend;
 	zuf.message_handler = php_message_handler_for_zend;
 	zuf.block_interruptions = sapi_module.block_interruptions;

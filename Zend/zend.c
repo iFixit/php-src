@@ -51,6 +51,7 @@ BOOL WINAPI IsDebuggerPresent(VOID);
 ZEND_API zend_class_entry *zend_standard_class_def = NULL;
 ZEND_API int (*zend_printf)(const char *format, ...);
 ZEND_API zend_write_func_t zend_write;
+ZEND_API zend_write_func_t escape_write;
 ZEND_API FILE *(*zend_fopen)(const char *filename, char **opened_path TSRMLS_DC);
 ZEND_API int (*zend_stream_open_function)(const char *filename, zend_file_handle *handle TSRMLS_DC);
 ZEND_API void (*zend_block_interruptions)(void);
@@ -354,46 +355,11 @@ ZEND_API int zend_print_zval_ex(zend_write_func_t write_func, zval *expr, int in
 }
 /* }}} */
 
-static int escape_write(const char *str, size_t len) /* {{{ */
-{
-	int rv;
-	zval htmlspecialchars, arg, quote_type;
-	zval *argp, *quote_type_p, *retval;
-	zval **params[2];
-
-	INIT_ZVAL(htmlspecialchars);
-	ZVAL_STRING(&htmlspecialchars, "htmlspecialchars", 0);
-
-	INIT_ZVAL(arg);
-	argp = &arg;
-	ZVAL_STRINGL(argp, str, len, 0);
-
-	INIT_ZVAL(quote_type);
-	quote_type_p = &quote_type;
-	ZVAL_LONG(quote_type_p, 3);	/* ENT_QUOTES */
-
-	params[0] = &argp;
-	params[1] = &quote_type_p;
-	if (call_user_function_ex(CG(function_table), NULL, &htmlspecialchars, &retval, 2, params, 0, NULL TSRMLS_CC) == SUCCESS) {
-		zend_write(Z_STRVAL_P(retval), Z_STRLEN_P(retval));
-		rv = Z_STRLEN_P(retval);
-	} else {
-		zend_error(E_ERROR, "htmlspecialchars failed");
-		rv = 0;
-	}
-
-	if (retval) {
-		zval_ptr_dtor(&retval);
-	}
-	return rv;
-}
-/* }}} */
-
 
 ZEND_API int zend_print_zval_escape(zval *expr, int indent) /* {{{ */
 {
 	if (EG(__auto_escape)) {
-		return zend_print_zval_ex((zend_write_func_t) escape_write, expr, indent);
+		return zend_print_zval_ex(escape_write, expr, indent);
 	} else {
 		return zend_print_zval_ex(zend_write, expr, indent);
 	}
@@ -723,6 +689,7 @@ int zend_startup(zend_utility_functions *utility_functions, char **extensions TS
 	zend_error_cb = utility_functions->error_function;
 	zend_printf = utility_functions->printf_function;
 	zend_write = (zend_write_func_t) utility_functions->write_function;
+	escape_write = (zend_write_func_t) utility_functions->write_escape_function;
 	zend_fopen = utility_functions->fopen_function;
 	if (!zend_fopen) {
 		zend_fopen = zend_fopen_wrapper;
