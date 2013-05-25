@@ -1847,7 +1847,7 @@ static int php_escape_write(const char *str, uint len) /* {{{ */
 	size_t new_len;
 	char *escaped;
  
-	escaped = php_escape_html_entities(str, len, &new_len, 0, 3 /* ENT_QUOTES */, NULL TSRMLS_CC);
+	escaped = php_escape_html_entities(str, len, &new_len, 0, EG(__auto_escape_flags), NULL TSRMLS_CC);
 	TSRMLS_FETCH();
 	php_output_write(escaped, new_len TSRMLS_CC);
 	efree(escaped);

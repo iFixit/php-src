@@ -843,6 +843,10 @@ default_socket_timeout = 60
 ; via html_special_chars()
 ;__auto_escape = Off
 
+; The flags to pass to html_special_chars() for auto-escaped content.
+; Default is ENT_QUOTES == 3
+;__auto_escape = 3
+
 ;;;;;;;;;;;;;;;;;;;;;;
 ; Dynamic Extensions ;
 ;;;;;;;;;;;;;;;;;;;;;;

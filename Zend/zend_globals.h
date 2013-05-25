@@ -263,6 +263,7 @@ struct _zend_executor_globals {
 #endif
 
 	int __auto_escape;
+	int __auto_escape_flags;
 	void *reserved[ZEND_MAX_RESERVED_RESOURCES];
 };
 
