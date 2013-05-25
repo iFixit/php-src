@@ -839,7 +839,8 @@ default_socket_timeout = 60
 ; Auto escaping ;
 ;;;;;;;;;;;;;;;;;
 
-; Whether to enable the auto escaping.
+; Whether to enable escaping of content from short php tags: '<?='
+; via htmlspecialchars()
 ;__auto_escape = Off
 
 ;;;;;;;;;;;;;;;;;;;;;;
