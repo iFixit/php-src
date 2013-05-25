@@ -138,6 +138,7 @@ static YYSIZE_T zend_yytnamerr(char*, const char*);
 %token T_ENCAPSED_AND_WHITESPACE  "quoted-string and whitespace (T_ENCAPSED_AND_WHITESPACE)"
 %token T_CONSTANT_ENCAPSED_STRING "quoted-string (T_CONSTANT_ENCAPSED_STRING)"
 %token T_ECHO       "echo (T_ECHO)"
+%token T_ECHO_ESCAPE "echo_escape (T_ECHO_ESCAPE)"
 %token T_DO         "do (T_DO)"
 %token T_WHILE      "while (T_WHILE)"
 %token T_ENDWHILE   "endwhile (T_ENDWHILE)"
@@ -196,6 +197,7 @@ static YYSIZE_T zend_yytnamerr(char*, const char*);
 %token T_DOC_COMMENT     "doc comment (T_DOC_COMMENT)"
 %token T_OPEN_TAG        "open tag (T_OPEN_TAG)"
 %token T_OPEN_TAG_WITH_ECHO "open tag with echo (T_OPEN_TAG_WITH_ECHO)"
+%token T_OPEN_TAG_WITH_ECHO_ESCAPE "open tag with escaped echo (T_OPEN_TAG_WITH_ECHO_ESCAPE)"
 %token T_CLOSE_TAG       "close tag (T_CLOSE_TAG)"
 %token T_WHITESPACE      "whitespace (T_WHITESPACE)"
 %token T_START_HEREDOC   "heredoc start (T_START_HEREDOC)"
@@ -300,6 +302,7 @@ unticked_statement:
 	|	T_GLOBAL global_var_list ';'
 	|	T_STATIC static_var_list ';'
 	|	T_ECHO echo_expr_list ';'
+	|	T_ECHO_ESCAPE echo_escape_expr_list ';'
 	|	T_INLINE_HTML			{ zend_do_echo(&$1 TSRMLS_CC); }
 	|	expr ';'				{ zend_do_free(&$1 TSRMLS_CC); }
 	|	T_UNSET '(' unset_variables ')' ';'
@@ -683,6 +686,10 @@ echo_expr_list:
 	|	expr					{ zend_do_echo(&$1 TSRMLS_CC); }
 ;
 
+echo_escape_expr_list:
+		echo_escape_expr_list ',' expr { zend_do_echo_escape(&$3 TSRMLS_CC); }
+	|	expr					{ zend_do_echo_escape(&$1 TSRMLS_CC); }
+;
 
 for_expr:
 		/* empty */			{ $$.op_type = IS_CONST;  Z_TYPE($$.u.constant) = IS_BOOL;  Z_LVAL($$.u.constant) = 1; }
