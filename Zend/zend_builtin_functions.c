@@ -95,7 +95,6 @@ static ZEND_FUNCTION(gc_enabled);
 static ZEND_FUNCTION(gc_enable);
 static ZEND_FUNCTION(gc_disable);
 static ZEND_FUNCTION(__auto_escape);
-static ZEND_FUNCTION(__safe);
 
 /* {{{ arginfo */
 ZEND_BEGIN_ARG_INFO(arginfo_zend__void, 0)
@@ -310,7 +309,6 @@ static const zend_function_entry builtin_functions[] = { /* {{{ */
 	ZEND_FE(gc_enable, 			arginfo_zend__void)
 	ZEND_FE(gc_disable, 		arginfo_zend__void)
 	ZEND_FE(__auto_escape,	NULL)
-	ZEND_FE(__safe,			NULL)
 	ZEND_FE_END
 };
 /* }}} */
@@ -2467,19 +2465,6 @@ ZEND_FUNCTION(__auto_escape)
 		zend_alter_ini_entry_ex("__auto_escape", sizeof("__auto_escape"), new_value, new_value_len, ZEND_INI_USER, ZEND_INI_STAGE_RUNTIME, 0 TSRMLS_CC);
 	}
 	RETVAL_LONG(old_auto_escape);
-}
-/* }}} */
-
-/* {{{ proto string __safe(variable)
-   echo a variable without auto escaping */
-ZEND_FUNCTION(__safe)
-{
-	zval *value;
-
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "z", &value) == FAILURE) {
-		ZEND_WRONG_PARAM_COUNT();
-	}
-	zend_print_variable(value);
 }
 /* }}} */
 
