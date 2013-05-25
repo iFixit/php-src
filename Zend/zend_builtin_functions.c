@@ -94,7 +94,6 @@ static ZEND_FUNCTION(gc_collect_cycles);
 static ZEND_FUNCTION(gc_enabled);
 static ZEND_FUNCTION(gc_enable);
 static ZEND_FUNCTION(gc_disable);
-static ZEND_FUNCTION(__auto_escape);
 
 /* {{{ arginfo */
 ZEND_BEGIN_ARG_INFO(arginfo_zend__void, 0)
@@ -308,7 +307,6 @@ static const zend_function_entry builtin_functions[] = { /* {{{ */
 	ZEND_FE(gc_enabled, 		arginfo_zend__void)
 	ZEND_FE(gc_enable, 			arginfo_zend__void)
 	ZEND_FE(gc_disable, 		arginfo_zend__void)
-	ZEND_FE(__auto_escape,	NULL)
 	ZEND_FE_END
 };
 /* }}} */
@@ -2445,26 +2443,6 @@ ZEND_FUNCTION(get_extension_funcs)
 		add_next_index_string(return_value, func->fname, 1);
 		func++;
 	}
-}
-/* }}} */
-
-/* {{{ proto int __auto_escape(int new_error_level=null)
-   Return the current __auto_escape value, and if an argument was passed - change to the value */
-ZEND_FUNCTION(__auto_escape)
-{
-	char *new_value;
-	int new_value_len;
-	int old_auto_escape;
-
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|s", &new_value, &new_value_len) == FAILURE) {
-		RETURN_FALSE;
-	}
-
-	old_auto_escape = EG(__auto_escape);
-	if (ZEND_NUM_ARGS() > 0) {
-		zend_alter_ini_entry_ex("__auto_escape", sizeof("__auto_escape"), new_value, new_value_len, ZEND_INI_USER, ZEND_INI_STAGE_RUNTIME, 0 TSRMLS_CC);
-	}
-	RETVAL_LONG(old_auto_escape);
 }
 /* }}} */
 
