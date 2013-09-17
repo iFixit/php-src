@@ -529,6 +529,7 @@ typedef struct _zend_utility_functions {
 	void (*error_function)(int type, const char *error_filename, const uint error_lineno, const char *format, va_list args) ZEND_ATTRIBUTE_PTR_FORMAT(printf, 4, 0);
 	int (*printf_function)(const char *format, ...) ZEND_ATTRIBUTE_PTR_FORMAT(printf, 1, 2);
 	int (*write_function)(const char *str, uint str_length);
+	int (*write_escape_function)(const char *str, uint str_length);
 	FILE *(*fopen_function)(const char *filename, char **opened_path TSRMLS_DC);
 	void (*message_handler)(long message, const void *data TSRMLS_DC);
 	void (*block_interruptions)(void);

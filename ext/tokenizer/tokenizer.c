@@ -122,6 +122,7 @@ static void tokenize(zval *return_value TSRMLS_DC)
 				}
 			case T_OPEN_TAG:
 			case T_OPEN_TAG_WITH_ECHO:
+			case T_OPEN_TAG_WITH_ECHO_ESCAPE:
 			case T_WHITESPACE:
 			case T_COMMENT:
 			case T_DOC_COMMENT:

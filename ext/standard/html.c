@@ -1122,7 +1122,7 @@ empty_source:
 }
 /* }}} */
 
-PHPAPI char *php_escape_html_entities(unsigned char *old, size_t oldlen, size_t *newlen, int all, int flags, char *hint_charset TSRMLS_DC)
+PHPAPI char *php_escape_html_entities(const unsigned char *old, size_t oldlen, size_t *newlen, int all, int flags, char *hint_charset TSRMLS_DC)
 {
 	return php_escape_html_entities_ex(old, oldlen, newlen, all, flags, hint_charset, 1 TSRMLS_CC);
 }
@@ -1134,7 +1134,7 @@ static inline void find_entity_for_char(
 	const entity_stage1_row *table,
 	const unsigned char **entity,
 	size_t *entity_len,
-	unsigned char *old,
+	const unsigned char *old,
 	size_t oldlen,
 	size_t *cursor)
 {
@@ -1210,7 +1210,7 @@ static inline void find_entity_for_char_basic(
 
 /* {{{ php_escape_html_entities
  */
-PHPAPI char *php_escape_html_entities_ex(unsigned char *old, size_t oldlen, size_t *newlen, int all, int flags, char *hint_charset, zend_bool double_encode TSRMLS_DC)
+PHPAPI char *php_escape_html_entities_ex(const unsigned char *old, size_t oldlen, size_t *newlen, int all, int flags, char *hint_charset, zend_bool double_encode TSRMLS_DC)
 {
 	size_t cursor, maxlen, len;
 	char *replaced;

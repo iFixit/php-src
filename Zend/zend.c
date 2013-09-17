@@ -51,6 +51,7 @@ BOOL WINAPI IsDebuggerPresent(VOID);
 ZEND_API zend_class_entry *zend_standard_class_def = NULL;
 ZEND_API int (*zend_printf)(const char *format, ...);
 ZEND_API zend_write_func_t zend_write;
+ZEND_API zend_write_func_t escape_write;
 ZEND_API FILE *(*zend_fopen)(const char *filename, char **opened_path TSRMLS_DC);
 ZEND_API int (*zend_stream_open_function)(const char *filename, zend_file_handle *handle TSRMLS_DC);
 ZEND_API void (*zend_block_interruptions)(void);
@@ -101,10 +102,34 @@ static ZEND_INI_MH(OnUpdateScriptEncoding) /* {{{ */
 }
 /* }}} */
 
+static ZEND_INI_MH(OnUpdateAutoEscape) /* {{{ */
+{
+	if (!new_value) {
+		EG(__auto_escape) = 0;
+	} else {
+		EG(__auto_escape) = atoi(new_value);
+	}
+	return SUCCESS;
+}
+/* }}} */
+ 
+static ZEND_INI_MH(OnUpdateAutoEscapeFlags) /* {{{ */
+{
+	if (!new_value) {
+		EG(__auto_escape_flags) = 0;
+	} else {
+		EG(__auto_escape_flags) = atoi(new_value);
+	}
+	return SUCCESS;
+}
+/* }}} */
+ 
 
 ZEND_INI_BEGIN()
 	ZEND_INI_ENTRY("error_reporting",				NULL,		ZEND_INI_ALL,		OnUpdateErrorReporting)
 	STD_ZEND_INI_BOOLEAN("zend.enable_gc",				"1",	ZEND_INI_ALL,		OnUpdateGCEnabled,      gc_enabled,     zend_gc_globals,        gc_globals)
+	ZEND_INI_ENTRY("__auto_escape",			NULL,		ZEND_INI_ALL,		OnUpdateAutoEscape)
+	ZEND_INI_ENTRY("__auto_escape_flags",			"3",		ZEND_INI_ALL,		OnUpdateAutoEscapeFlags)
  	STD_ZEND_INI_BOOLEAN("zend.multibyte", "0", ZEND_INI_PERDIR, OnUpdateBool, multibyte,      zend_compiler_globals, compiler_globals)
  	ZEND_INI_ENTRY("zend.script_encoding",			NULL,		ZEND_INI_ALL,		OnUpdateScriptEncoding)
  	STD_ZEND_INI_BOOLEAN("zend.detect_unicode",			"1",	ZEND_INI_ALL,		OnUpdateBool, detect_unicode, zend_compiler_globals, compiler_globals)
@@ -341,6 +366,16 @@ ZEND_API int zend_print_zval_ex(zend_write_func_t write_func, zval *expr, int in
 	return Z_STRLEN_P(expr);
 }
 /* }}} */
+
+
+ZEND_API int zend_print_zval_escape(zval *expr, int indent) /* {{{ */
+{
+	if (EG(__auto_escape)) {
+		return zend_print_zval_ex(escape_write, expr, indent);
+	} else {
+		return zend_print_zval_ex(zend_write, expr, indent);
+	}
+}
 
 ZEND_API void zend_print_flat_zval_r(zval *expr TSRMLS_DC) /* {{{ */
 {
@@ -666,6 +701,7 @@ int zend_startup(zend_utility_functions *utility_functions, char **extensions TS
 	zend_error_cb = utility_functions->error_function;
 	zend_printf = utility_functions->printf_function;
 	zend_write = (zend_write_func_t) utility_functions->write_function;
+	escape_write = (zend_write_func_t) utility_functions->write_escape_function;
 	zend_fopen = utility_functions->fopen_function;
 	if (!zend_fopen) {
 		zend_fopen = zend_fopen_wrapper;
