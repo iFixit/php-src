@@ -970,31 +970,21 @@ ZEND_VM_HANDLER(37, ZEND_POST_DEC, VAR|CV, ANY)
 	ZEND_VM_NEXT_OPCODE();
 }
 
+/* Note: this should be exactly the same as ZEND_ECHO except with an escaping
+ * print function */
 ZEND_VM_HANDLER(151, ZEND_ECHO_ESCAPE, CONST|TMP|VAR|CV, ANY)
 {
 	USE_OPLINE
 	zend_free_op free_op1;
-	zval z_copy;
 	zval *z;
 
 	SAVE_OPLINE();
 	z = GET_OP1_ZVAL_PTR(BP_VAR_R);
 
-	if (OP1_TYPE != IS_CONST &&
-	    UNEXPECTED(Z_TYPE_P(z) == IS_OBJECT) &&
-	    Z_OBJ_HT_P(z)->get_method != NULL) {
-	    if (OP1_TYPE == IS_TMP_VAR) {
-	    	INIT_PZVAL(z);
-	    }
-		if (zend_std_cast_object_tostring(z, &z_copy, IS_STRING TSRMLS_CC) == SUCCESS) {
-			zend_print_variable_escape(&z_copy);
-			zval_dtor(&z_copy);
-		} else {
-			zend_print_variable_escape(z);
-		}
-	} else {
-		zend_print_variable_escape(z);
+	if (OP1_TYPE == IS_TMP_VAR && Z_TYPE_P(z) == IS_OBJECT) {
+		INIT_PZVAL(z);
 	}
+	zend_print_variable_escape(z);
 
 	FREE_OP1();
 	CHECK_EXCEPTION();
