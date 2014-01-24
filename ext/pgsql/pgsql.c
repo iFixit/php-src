@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2012 The PHP Group                                |
+   | Copyright (c) 1997-2014 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -37,6 +37,9 @@
 #include "ext/standard/php_standard.h"
 #include "ext/standard/php_smart_str.h"
 #include "ext/ereg/php_regex.h"
+#ifdef PHP_WIN32
+# include "win32/time.h"
+#endif
 
 #undef PACKAGE_BUGREPORT
 #undef PACKAGE_NAME
@@ -63,6 +66,7 @@
 #define PGSQL_MAX_LENGTH_OF_LONG   30
 #define PGSQL_MAX_LENGTH_OF_DOUBLE 60
 
+#if LONG_MAX < UINT_MAX
 #define PGSQL_RETURN_OID(oid) do { \
 	if (oid > LONG_MAX) { \
 		smart_str s = {0}; \
@@ -72,7 +76,9 @@
 	} \
 	RETURN_LONG((long)oid); \
 } while(0)
-
+#else
+#define PGSQL_RETURN_OID(oid) (RETURN_LONG((long)oid))
+#endif
 
 #if HAVE_PQSETNONBLOCKING
 #define PQ_SETNONBLOCKING(pg_link, flag) PQsetnonblocking(pg_link, flag)
@@ -422,6 +428,17 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_pg_unescape_bytea, 0, 0, 1)
 ZEND_END_ARG_INFO()
 #endif
 
+#if HAVE_PQESCAPE
+ZEND_BEGIN_ARG_INFO_EX(arginfo_pg_escape_literal, 0, 0, 0)
+	ZEND_ARG_INFO(0, connection)
+	ZEND_ARG_INFO(0, data)
+ZEND_END_ARG_INFO()
+ZEND_BEGIN_ARG_INFO_EX(arginfo_pg_escape_identifier, 0, 0, 0)
+	ZEND_ARG_INFO(0, connection)
+	ZEND_ARG_INFO(0, data)
+ZEND_END_ARG_INFO()
+#endif
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_pg_result_error, 0, 0, 1)
 	ZEND_ARG_INFO(0, result)
 ZEND_END_ARG_INFO()
@@ -652,6 +669,8 @@ const zend_function_entry pgsql_functions[] = {
 	PHP_FE(pg_escape_string,	arginfo_pg_escape_string)
 	PHP_FE(pg_escape_bytea, 	arginfo_pg_escape_bytea)
 	PHP_FE(pg_unescape_bytea, 	arginfo_pg_unescape_bytea)
+	PHP_FE(pg_escape_literal,	arginfo_pg_escape_literal)
+	PHP_FE(pg_escape_identifier,	arginfo_pg_escape_identifier)
 #endif
 #if HAVE_PQSETERRORVERBOSITY
 	PHP_FE(pg_set_error_verbosity,	arginfo_pg_set_error_verbosity)
@@ -815,7 +834,7 @@ static void _php_pgsql_notice_handler(void *resource_id, const char *message)
 	TSRMLS_FETCH();
 	if (! PGG(ignore_notices)) {
 		notice = (php_pgsql_notice *)emalloc(sizeof(php_pgsql_notice));
-		notice->message = _php_pgsql_trim_message(message, &notice->len);
+		notice->message = _php_pgsql_trim_message(message, (int *)&notice->len);
 		if (PGG(log_notices)) {
 			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "%s", notice->message);
 		}
@@ -901,6 +920,82 @@ static void _free_result(zend_rsrc_list_entry *rsrc TSRMLS_DC)
 }
 /* }}} */
 
+
+static int _php_pgsql_detect_identifier_escape(const char *identifier, size_t len)
+{
+	size_t i;
+
+	/* Handle edge case. Cannot be a escaped string */
+	if (len <= 2) {
+		return FAILURE;
+	}
+	/* Detect double qoutes */
+	if (identifier[0] == '"' && identifier[len-1] == '"') {
+		/* Detect wrong format of " inside of escaped string */
+		for (i = 1; i < len-1; i++) {
+			if (identifier[i] == '"' && (identifier[++i] != '"' || i == len-1)) {
+				return FAILURE;
+			}
+		}
+	} else {
+		return FAILURE;
+	}
+	/* Escaped properly */
+	return SUCCESS;
+}
+
+#if !HAVE_PQESCAPELITERAL
+/* {{{ _php_pgsql_escape_identifier
+ * Since PQescapeIdentifier() is unavailable (PostgreSQL 9.0 <), idenfifers
+ * should be escaped by pgsql module.
+ * Note: this function does not care for encoding. Therefore users should not
+ * use this with SJIS/BIG5 etc. (i.e. Encoding base injection may possible with
+ * before PostgreSQL 9.0)
+ */
+static char *_php_pgsql_escape_identifier(const char *field, size_t field_len)
+{
+	ulong field_escaped_len = field_len*2 + 3;
+	ulong i, j = 0;
+	char *field_escaped;
+
+	field_escaped = (char *)malloc(field_escaped_len);
+	field_escaped[j++] = '"';
+	for (i = 0; i < field_len; i++) {
+		if (field[i] == '"') {
+			field_escaped[j++] = '"';
+			field_escaped[j++] = '"';
+		} else {
+			field_escaped[j++] = field[i];
+		}
+	}
+	field_escaped[j++] = '"';
+	field_escaped[j] = '\0';
+	return field_escaped;
+}
+/* }}} */
+#endif
+
+/* {{{ _php_pgsql_strndup, no strndup should be used */
+static char *_php_pgsql_strndup(const char *s, size_t len)
+{
+	char *new;
+
+	if (NULL == s) {
+		return (char *)NULL;
+	}
+
+	new = (char *) malloc(len + 1);
+
+	if (NULL == new) {
+		return (char *)NULL;
+	}
+
+	new[len] = '\0';
+
+	return memmove(new, s, len);
+}
+/* }}} */
+
 /* {{{ PHP_INI
  */
 PHP_INI_BEGIN()
@@ -934,6 +1029,11 @@ PHP_MINIT_FUNCTION(pgsql)
 	le_result = zend_register_list_destructors_ex(_free_result, NULL, "pgsql result", module_number);
 	le_lofp = zend_register_list_destructors_ex(_free_ptr, NULL, "pgsql large object", module_number);
 	le_string = zend_register_list_destructors_ex(_free_ptr, NULL, "pgsql string", module_number);
+#if HAVE_PG_CONFIG_H
+	/* PG_VERSION - libpq version */
+	REGISTER_STRING_CONSTANT("PGSQL_LIBPQ_VERSION", PG_VERSION, CONST_CS | CONST_PERSISTENT);
+	REGISTER_STRING_CONSTANT("PGSQL_LIBPQ_VERSION_STR", PG_VERSION_STR, CONST_CS | CONST_PERSISTENT);
+#endif
 	/* For connection option */
 	REGISTER_LONG_CONSTANT("PGSQL_CONNECT_FORCE_NEW", PGSQL_CONNECT_FORCE_NEW, CONST_CS | CONST_PERSISTENT);
 	/* For pg_fetch_array() */
@@ -1048,6 +1148,7 @@ PHP_MINFO_FUNCTION(pgsql)
 	php_info_print_table_header(2, "PostgreSQL Support", "enabled");
 #if HAVE_PG_CONFIG_H
 	php_info_print_table_row(2, "PostgreSQL(libpq) Version", PG_VERSION);
+	php_info_print_table_row(2, "PostgreSQL(libpq) ", PG_VERSION_STR);
 #ifdef HAVE_PGSQL_WITH_MULTIBYTE_SUPPORT
 	php_info_print_table_row(2, "Multibyte character support", "enabled");
 #else
@@ -1717,7 +1818,7 @@ PHP_FUNCTION(pg_query_params)
 			} else {
 				zval tmp_val = **tmp;
 				zval_copy_ctor(&tmp_val);
-				convert_to_string(&tmp_val);
+				convert_to_cstring(&tmp_val);
 				if (Z_TYPE(tmp_val) != IS_STRING) {
 					php_error_docref(NULL TSRMLS_CC, E_WARNING,"Error converting parameter");
 					zval_dtor(&tmp_val);
@@ -2541,7 +2642,7 @@ static void php_pgsql_fetch_hash(INTERNAL_FUNCTION_PARAMETERS, long result_type,
 					Bucket *p;
 	
 					fci.param_count = 0;
-					fci.params = safe_emalloc(sizeof(zval*), ht->nNumOfElements, 0);
+					fci.params = safe_emalloc(sizeof(zval***), ht->nNumOfElements, 0);
 					p = ht->pListHead;
 					while (p != NULL) {
 						fci.params[fci.param_count++] = (zval**)p->pData;
@@ -4057,7 +4158,7 @@ PHP_FUNCTION(pg_escape_bytea)
 #ifdef HAVE_PQESCAPE_BYTEA_CONN
 	if (pgsql_link != NULL || id != -1) {
 		ZEND_FETCH_RESOURCE2(pgsql, PGconn *, &pgsql_link, id, "PostgreSQL link", le_link, le_plink);
-		to = (char *)PQescapeByteaConn(pgsql, from, (size_t)from_len, &to_len);
+		to = (char *)PQescapeByteaConn(pgsql, (unsigned char *)from, (size_t)from_len, &to_len);
 	} else
 #endif
 		to = (char *)PQescapeBytea((unsigned char*)from, from_len, &to_len);
@@ -4193,12 +4294,142 @@ PHP_FUNCTION(pg_unescape_bytea)
 	to = (char *)php_pgsql_unescape_bytea((unsigned char*)from, &to_len);
 #endif
 	if (!to) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING,"Invalid parameter");
 		RETURN_FALSE;
 	}
 	RETVAL_STRINGL(to, to_len, 0);
 }
 /* }}} */
 #endif
+
+#ifdef HAVE_PQESCAPE
+#if !HAVE_PQESCAPELITERAL
+/* emulate libpq's PQescapeInternal() 9.0 or later */
+static char* php_pgsql_PQescapeInternal(PGconn *conn, const char *str, size_t len, int escape_literal) {
+	char *result, *rp;
+	const char *s;
+	size_t tmp_len;
+	int input_len = len;
+	char quote_char = escape_literal ? '\'' : '"';
+
+	if (!conn) {
+		return NULL;
+	}
+
+	/*
+	 * NOTE: multibyte strings that could cointain slashes should be considered.
+	 * (e.g. SJIS, BIG5) However, it cannot be done without valid PGconn and mbstring. 
+	 * Therefore, this function does not support such encodings currently.
+	 * FIXME: add encoding check and skip multibyte char bytes if there is vaild PGconn.
+	 */
+
+	/* allocate enough memory */
+	rp = result = (char *)emalloc(len*2 + 5); /* leading " E" needs extra 2 bytes + quote_chars on both end for 2 bytes + NULL */
+
+	if (escape_literal) {
+		/* check backslashes */
+		tmp_len = strspn(str, "\\");
+		if (tmp_len != len) {
+			/* add " E" for escaping slashes */
+			*rp++ = ' ';
+			*rp++ = 'E';
+		}
+	}
+	/* open quote */
+	*rp++ = quote_char;
+	for (s = str; s - str < input_len; ++s) {
+		if (*s == quote_char || (escape_literal && *s == '\\')) {
+			*rp++ = *s;
+			*rp++ = *s;
+		} else {
+			*rp++ = *s;
+		}
+	}
+	*rp++ = quote_char;
+	*rp = '\0';
+	
+	return result;
+}
+#endif
+
+static void php_pgsql_escape_internal(INTERNAL_FUNCTION_PARAMETERS, int escape_literal) {
+	char *from = NULL, *to = NULL;
+	zval *pgsql_link = NULL;
+	PGconn *pgsql;
+	int from_len;
+	int id = -1;
+
+	switch (ZEND_NUM_ARGS()) {
+		case 1:
+			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &from, &from_len) == FAILURE) {
+				return;
+			}
+			pgsql_link = NULL;
+			id = PGG(default_link);
+			break;
+
+		default:
+			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rs", &pgsql_link, &from, &from_len) == FAILURE) {
+				return;
+			}
+			break;
+	}
+
+	if (pgsql_link == NULL && id == -1) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING,"Cannot get default pgsql link");
+		RETURN_FALSE;
+	}
+
+	ZEND_FETCH_RESOURCE2(pgsql, PGconn *, &pgsql_link, id, "PostgreSQL link", le_link, le_plink);
+	if (pgsql == NULL) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING,"Cannot get pgsql link");
+		RETURN_FALSE;
+	}
+#ifdef HAVE_PQESCAPELITERAL
+	/* Use a block with a local var to avoid unused variable warnings */
+	{
+		char *tmp;
+
+		if (escape_literal) {
+			tmp = PQescapeLiteral(pgsql, from, (size_t)from_len);
+		} else {
+			tmp = PQescapeIdentifier(pgsql, from, (size_t)from_len);
+		}
+		if (!tmp) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING,"Failed to escape");
+			RETURN_FALSE;
+		}
+		to = estrdup(tmp);
+		PQfreemem(tmp);
+	}
+#else 
+	to = php_pgsql_PQescapeInternal(pgsql, from, (size_t)from_len, escape_literal);
+	if (!to) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING,"Failed to escape");
+		RETURN_FALSE;
+	}
+#endif
+
+	RETURN_STRING(to, 0);
+}
+
+/* {{{ proto string pg_escape_literal([resource connection,] string data)
+   Escape parameter as string literal (i.e. parameter)	*/
+PHP_FUNCTION(pg_escape_literal)
+{
+	php_pgsql_escape_internal(INTERNAL_FUNCTION_PARAM_PASSTHRU, 1);
+}
+/* }}} */
+
+/* {{{ proto string pg_escape_identifier([resource connection,] string data)
+   Escape identifier (i.e. table name, field name)	*/
+PHP_FUNCTION(pg_escape_identifier)
+{
+	php_pgsql_escape_internal(INTERNAL_FUNCTION_PARAM_PASSTHRU, 0);
+}
+/* }}} */
+#endif
+
 
 /* {{{ proto string pg_result_error(resource result)
    Get error message associated with result */
@@ -4430,6 +4661,7 @@ PHP_FUNCTION(pg_send_query)
 	PGconn *pgsql;
 	PGresult *res;
 	int leftover = 0;
+	int ret;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rs",
 							  &pgsql_link, &query, &len) == FAILURE) {
@@ -4457,6 +4689,14 @@ PHP_FUNCTION(pg_send_query)
 			RETURN_FALSE;
 		}
 	}
+	/* Wait to finish sending buffer */
+	while ((ret = PQflush(pgsql))) {
+		if (ret == -1) {
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Could not empty PostgreSQL send buffer");
+			break;
+		}
+		usleep(10000);
+	}
 	if (PQ_SETNONBLOCKING(pgsql, 0)) {
 		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Cannot set connection to blocking mode");
 	}
@@ -4477,6 +4717,7 @@ PHP_FUNCTION(pg_send_query_params)
 	PGconn *pgsql;
 	PGresult *res;
 	int leftover = 0;
+	int ret;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rsa/", &pgsql_link, &query, &query_len, &pv_param_arr) == FAILURE) {
 		return;
@@ -4543,6 +4784,14 @@ PHP_FUNCTION(pg_send_query_params)
 		}
 	}
 	_php_pgsql_free_params(params, num_params);
+	/* Wait to finish sending buffer */
+	while ((ret = PQflush(pgsql))) {
+		if (ret == -1) {
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Could not empty PostgreSQL send buffer");
+			break;
+		}
+		usleep(10000);
+	}
 	if (PQ_SETNONBLOCKING(pgsql, 0)) {
 		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Cannot set connection to blocking mode");
 	}
@@ -4562,6 +4811,7 @@ PHP_FUNCTION(pg_send_prepare)
 	PGconn *pgsql;
 	PGresult *res;
 	int leftover = 0;
+	int ret;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rss", &pgsql_link, &stmtname, &stmtname_len, &query, &query_len) == FAILURE) {
 		return;
@@ -4592,6 +4842,14 @@ PHP_FUNCTION(pg_send_prepare)
 			RETURN_FALSE;
 		}
 	}
+	/* Wait to finish sending buffer */
+	while ((ret = PQflush(pgsql))) {
+		if (ret == -1) {
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Could not empty postgres send buffer");
+			break;
+		}
+		usleep(10000);
+	}
 	if (PQ_SETNONBLOCKING(pgsql, 0)) {
 		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Cannot set connection to blocking mode");
 	}
@@ -4614,6 +4872,7 @@ PHP_FUNCTION(pg_send_execute)
 	PGconn *pgsql;
 	PGresult *res;
 	int leftover = 0;
+	int ret;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rsa", &pgsql_link, &stmtname, &stmtname_len, &pv_param_arr) == FAILURE) {
 		return;
@@ -4680,6 +4939,14 @@ PHP_FUNCTION(pg_send_execute)
 		}
 	}
 	_php_pgsql_free_params(params, num_params);
+	/* Wait to finish sending buffer */
+	while ((ret = PQflush(pgsql))) {
+		if (ret == -1) {
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Could not empty postgres send buffer");
+			break;
+		}
+		usleep(10000);
+	}
 	if (PQ_SETNONBLOCKING(pgsql, 0)) {
 		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Cannot set connection to blocking mode");
 	}
@@ -4787,7 +5054,9 @@ PHP_FUNCTION(pg_get_notify)
 #else 
 		if (atof(PG_VERSION) >= 9.0) {
 #endif 
+#if HAVE_PQPARAMETERSTATUS
 			add_index_string(return_value, 2, pgsql_notify->extra, 1);
+#endif
 		}
 	}
 	if (result_type & PGSQL_ASSOC) {
@@ -4798,7 +5067,9 @@ PHP_FUNCTION(pg_get_notify)
 #else 
 		if (atof(PG_VERSION) >= 9.0) {
 #endif 
+#if HAVE_PQPARAMETERSTATUS
 			add_assoc_string(return_value, "payload", pgsql_notify->extra, 1);
+#endif
 		}
 	}
 	PQfreemem(pgsql_notify);
@@ -4831,8 +5102,9 @@ PHP_PGSQL_API int php_pgsql_meta_data(PGconn *pg_link, const char *table_name, z
 {
 	PGresult *pg_result;
 	char *src, *tmp_name, *tmp_name2 = NULL;
+	char *escaped;
 	smart_str querystr = {0};
-	int new_len;
+	size_t new_len;
 	int i, num_rows;
 	zval *elem;
 	
@@ -4851,23 +5123,36 @@ PHP_PGSQL_API int php_pgsql_meta_data(PGconn *pg_link, const char *table_name, z
 	}
 
 	smart_str_appends(&querystr, 
-			"SELECT a.attname, a.attnum, t.typname, a.attlen, a.attnotNULL, a.atthasdef, a.attndims "
+			"SELECT a.attname, a.attnum, t.typname, a.attlen, a.attnotnull, a.atthasdef, a.attndims, t.typtype = 'e' "
 			"FROM pg_class as c, pg_attribute a, pg_type t, pg_namespace n "
 			"WHERE a.attnum > 0 AND a.attrelid = c.oid AND c.relname = '");
-	tmp_name2 = php_addslashes(tmp_name2, strlen(tmp_name2), &new_len, 0 TSRMLS_CC);
-	smart_str_appendl(&querystr, tmp_name2, new_len);
-	
+	escaped = (char *)safe_emalloc(strlen(tmp_name2), 2, 1);
+#if HAVE_PQESCAPE_CONN
+	new_len = PQescapeStringConn(pg_link, escaped, tmp_name2, strlen(tmp_name2), NULL);
+#else
+	new_len = PQescapeString(escaped, tmp_name2, strlen(tmp_name2));
+#endif
+	if (new_len) {
+		smart_str_appends(&querystr, escaped);
+	}
+	efree(escaped);
+
 	smart_str_appends(&querystr, "' AND c.relnamespace = n.oid AND n.nspname = '");
-	tmp_name = php_addslashes(tmp_name, strlen(tmp_name), &new_len, 0 TSRMLS_CC);
-	smart_str_appendl(&querystr, tmp_name, new_len);
+	escaped = (char *)safe_emalloc(strlen(tmp_name), 2, 1);
+#if HAVE_PQESCAPE_CONN
+	new_len = PQescapeStringConn(pg_link, escaped, tmp_name, strlen(tmp_name), NULL);
+#else
+	new_len = PQescapeString(escaped, tmp_name, strlen(tmp_name));
+#endif
+	if (new_len) {
+		smart_str_appends(&querystr, escaped);
+	}
+	efree(escaped);
 
 	smart_str_appends(&querystr, "' AND a.atttypid = t.oid ORDER BY a.attnum;");
 	smart_str_0(&querystr);
-	
-	efree(tmp_name2);
-	efree(tmp_name);
-	efree(src);	
-	
+	efree(src);
+
 	pg_result = PQexec(pg_link, querystr.c);
 	if (PQresultStatus(pg_result) != PGRES_TUPLES_OK || (num_rows = PQntuples(pg_result)) == 0) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Table '%s' doesn't exists", table_name);
@@ -4897,6 +5182,12 @@ PHP_PGSQL_API int php_pgsql_meta_data(PGconn *pg_link, const char *table_name, z
 			add_assoc_bool(elem, "has default", 0);
 		}
 		add_assoc_long(elem, "array dims", atoi(PQgetvalue(pg_result,i,6)));
+		if (!strcmp(PQgetvalue(pg_result,i,7), "t")) {
+			add_assoc_bool(elem, "is enum", 1);
+		}
+		else {
+			add_assoc_bool(elem, "is enum", 0);
+		}
 		name = PQgetvalue(pg_result,i,0);
 		add_assoc_zval(meta, name, elem);
 	}
@@ -4930,7 +5221,18 @@ PHP_FUNCTION(pg_meta_data)
 		zval_dtor(return_value); /* destroy array */
 		RETURN_FALSE;
 	}
-} 
+	else {
+		HashPosition pos;
+		zval **val;
+
+		for (zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(return_value), &pos);
+			zend_hash_get_current_data_ex(Z_ARRVAL_P(return_value), (void **)&val, &pos) == SUCCESS;
+			zend_hash_move_forward_ex(Z_ARRVAL_P(return_value), &pos)) {
+			/* delete newly added entry, in order to keep BC */
+			zend_hash_del_key_or_index(Z_ARRVAL_PP(val), "is enum", sizeof("is enum"), 0, HASH_DEL_KEY);
+		}
+	}
+}
 /* }}} */
 
 /* {{{ php_pgsql_get_data_type
@@ -5073,6 +5375,7 @@ static int php_pgsql_add_quotes(zval *src, zend_bool should_free TSRMLS_DC)
 	assert(Z_TYPE_P(src) == IS_STRING);
 	assert(should_free == 1 || should_free == 0);
 
+	smart_str_appendc(&str, 'E');
 	smart_str_appendc(&str, '\'');
 	smart_str_appendl(&str, Z_STRVAL_P(src), Z_STRLEN_P(src));
 	smart_str_appendc(&str, '\'');
@@ -5112,8 +5415,9 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 	char *field = NULL;
 	uint field_len = -1;
 	ulong num_idx = -1;
-	zval *meta, **def, **type, **not_null, **has_default, **val, *new_val;
-	int new_len, key_type, err = 0, skip_field;
+	zval *meta, **def, **type, **not_null, **has_default, **is_enum, **val, *new_val;
+	int key_type, err = 0, skip_field;
+	php_pgsql_data_type data_type;
 	
 	assert(pg_link != NULL);
 	assert(Z_TYPE_P(values) == IS_ARRAY);
@@ -5125,6 +5429,8 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 	}
 	MAKE_STD_ZVAL(meta);
 	array_init(meta);
+
+/* table_name is escaped by php_pgsql_meta_data */
 	if (php_pgsql_meta_data(pg_link, table_name, meta TSRMLS_CC) == FAILURE) {
 		zval_dtor(meta);
 		FREE_ZVAL(meta);
@@ -5136,7 +5442,7 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 		skip_field = 0;
 		new_val = NULL;
 		
-		if ((key_type = zend_hash_get_current_key_ex(Z_ARRVAL_P(values), &field, &field_len, &num_idx, 0, &pos)) == HASH_KEY_NON_EXISTANT) {
+		if ((key_type = zend_hash_get_current_key_ex(Z_ARRVAL_P(values), &field, &field_len, &num_idx, 0, &pos)) == HASH_KEY_NON_EXISTENT) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to get array key type");
 			err = 1;
 		}
@@ -5144,7 +5450,7 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Accepts only string key for values");
 			err = 1;
 		}
-		if (!err && key_type == HASH_KEY_NON_EXISTANT) {
+		if (!err && key_type == HASH_KEY_NON_EXISTENT) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Accepts only string key for values");
 			err = 1;
 		}
@@ -5164,17 +5470,30 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Detected broken meta data. Missing 'has default'");
 			err = 1;
 		}
+		if (!err && zend_hash_find(Z_ARRVAL_PP(def), "is enum", sizeof("is enum"), (void **)&is_enum) == FAILURE) {
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Detected broken meta data. Missing 'is enum'");
+			err = 1;
+		}
 		if (!err && (Z_TYPE_PP(val) == IS_ARRAY ||
 			 Z_TYPE_PP(val) == IS_OBJECT ||
 			 Z_TYPE_PP(val) == IS_CONSTANT_ARRAY)) {
-			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Expects scaler values as field values");
+			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Expects scalar values as field values");
 			err = 1;
 		}
 		if (err) {
 			break; /* break out for() */
 		}
 		ALLOC_INIT_ZVAL(new_val);
-		switch(php_pgsql_get_data_type(Z_STRVAL_PP(type), Z_STRLEN_PP(type)))
+
+		if (Z_BVAL_PP(is_enum)) {
+			/* enums need to be treated like strings */
+			data_type = PG_TEXT;
+		}
+		else {
+			data_type = php_pgsql_get_data_type(Z_STRVAL_PP(type), Z_STRLEN_PP(type));
+		}
+
+		switch(data_type)
 		{
 			case PG_BOOL:
 				switch (Z_TYPE_PP(val)) {
@@ -5324,15 +5643,15 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 						}
 						else {
 							Z_TYPE_P(new_val) = IS_STRING;
-#if HAVE_PQESCAPE
+#if HAVE_PQESCAPE_CONN
 							{
 								char *tmp;
-	 							tmp = (char *)safe_emalloc(Z_STRLEN_PP(val), 2, 1);
-								Z_STRLEN_P(new_val) = (int)PQescapeString(tmp, Z_STRVAL_PP(val), Z_STRLEN_PP(val));
+								tmp = (char *)safe_emalloc(Z_STRLEN_PP(val), 2, 1);
+								Z_STRLEN_P(new_val) = (int)PQescapeStringConn(pg_link, tmp, Z_STRVAL_PP(val), Z_STRLEN_PP(val), NULL);
 								Z_STRVAL_P(new_val) = tmp;
 							}
 #else					
-							Z_STRVAL_P(new_val) = php_addslashes(Z_STRVAL_PP(val), Z_STRLEN_PP(val), &Z_STRLEN_P(new_val), 0 TSRMLS_CC);
+							Z_STRVAL_P(new_val) = (int)PQescapeString(Z_STRVAL_PP(val), Z_STRLEN_PP(val), &Z_STRLEN_P(new_val), 0 TSRMLS_CC);
 #endif
 							php_pgsql_add_quotes(new_val, 1 TSRMLS_CC);
 						}
@@ -5618,10 +5937,11 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 						else {
 							unsigned char *tmp;
 							size_t to_len;
+							smart_str s = {0};
 #ifdef HAVE_PQESCAPE_BYTEA_CONN
-							tmp = PQescapeByteaConn(pg_link, Z_STRVAL_PP(val), Z_STRLEN_PP(val), &to_len);
+							tmp = PQescapeByteaConn(pg_link, (unsigned char *)Z_STRVAL_PP(val), Z_STRLEN_PP(val), &to_len);
 #else
-							tmp = PQescapeBytea(Z_STRVAL_PP(val), Z_STRLEN_PP(val), &to_len);
+							tmp = PQescapeBytea(Z_STRVAL_PP(val), (unsigned char *)Z_STRLEN_PP(val), &to_len);
 #endif
 							Z_TYPE_P(new_val) = IS_STRING;
 							Z_STRLEN_P(new_val) = to_len-1; /* PQescapeBytea's to_len includes additional '\0' */
@@ -5629,7 +5949,11 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 							memcpy(Z_STRVAL_P(new_val), tmp, to_len);
 							PQfreemem(tmp);
 							php_pgsql_add_quotes(new_val, 1 TSRMLS_CC);
-								
+							smart_str_appendl(&s, Z_STRVAL_P(new_val), Z_STRLEN_P(new_val));
+							smart_str_0(&s);
+							efree(Z_STRVAL_P(new_val));
+							Z_STRVAL_P(new_val) = s.c;
+							Z_STRLEN_P(new_val) = s.len;
 						}
 						break;
 						
@@ -5714,11 +6038,22 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 			FREE_ZVAL(new_val);
 			break; /* break out for() */
 		}
+		/* If field is NULL and HAS DEFAULT, should be skipped */
 		if (!skip_field) {
-			/* If field is NULL and HAS DEFAULT, should be skipped */
-			field = php_addslashes(field, strlen(field), &new_len, 0 TSRMLS_CC);
-			add_assoc_zval(result, field, new_val);
-			efree(field);
+			char *escaped;
+			size_t field_len = strlen(field);
+
+			if (_php_pgsql_detect_identifier_escape(field, field_len) == SUCCESS) {
+				escaped = _php_pgsql_strndup(field, field_len);
+			} else {
+#if HAVE_PQESCAPELITERAL
+				escaped = PQescapeIdentifier(pg_link, field, field_len);
+#else
+				escaped = _php_pgsql_escape_identifier(field, field_len);
+#endif
+			}
+			add_assoc_zval(result, escaped, new_val);
+			free(escaped);
 		}
 	} /* for */
 	zval_dtor(meta);
@@ -5793,6 +6128,45 @@ static int do_exec(smart_str *querystr, int expect, PGconn *pg_link, ulong opt T
 	return -1;
 }
 
+static inline void build_tablename(smart_str *querystr, PGconn *pg_link, const char *table)
+{
+	char *table_copy, *escaped, *token, *tmp;
+	size_t len;
+
+	/* schame.table should be "schame"."table" */
+	table_copy = estrdup(table);
+	token = php_strtok_r(table_copy, ".", &tmp);
+	len = strlen(token);
+	if (_php_pgsql_detect_identifier_escape(token, len) == SUCCESS) {
+		escaped = _php_pgsql_strndup(token, len);
+	} else {
+#if HAVE_PQESCAPELITERAL
+		escaped = PQescapeIdentifier(pg_link, token, len);
+#else
+		escaped = _php_pgsql_escape_identifier(token, len);
+#endif
+	}
+	smart_str_appends(querystr, escaped);
+	free(escaped);
+	if (tmp && *tmp) {
+		len = strlen(tmp);
+		/* "schema"."table" format */
+		if (_php_pgsql_detect_identifier_escape(tmp, len) == SUCCESS) {
+			escaped = _php_pgsql_strndup(tmp, len);
+		} else {
+#if HAVE_PQESCAPELITERAL
+			escaped = PQescapeIdentifier(pg_link, tmp, len);
+#else
+			escaped = _php_pgsql_escape_identifier(tmp, len);
+#endif
+		}
+		smart_str_appendc(querystr, '.');
+		smart_str_appends(querystr, escaped);
+		free(escaped);
+	}
+	efree(table_copy);
+}
+
 /* {{{ php_pgsql_insert
  */
 PHP_PGSQL_API int php_pgsql_insert(PGconn *pg_link, const char *table, zval *var_array, ulong opt, char **sql TSRMLS_DC)
@@ -5812,7 +6186,7 @@ PHP_PGSQL_API int php_pgsql_insert(PGconn *pg_link, const char *table, zval *var
 
 	if (zend_hash_num_elements(Z_ARRVAL_P(var_array)) == 0) {
 		smart_str_appends(&querystr, "INSERT INTO ");
-		smart_str_appends(&querystr, table);
+		build_tablename(&querystr, pg_link, table);
 		smart_str_appends(&querystr, " DEFAULT VALUES");
 
 		goto no_values;
@@ -5827,14 +6201,14 @@ PHP_PGSQL_API int php_pgsql_insert(PGconn *pg_link, const char *table, zval *var
 		}
 		var_array = converted;
 	}
-	
+
 	smart_str_appends(&querystr, "INSERT INTO ");
-	smart_str_appends(&querystr, table);
+	build_tablename(&querystr, pg_link, table);
 	smart_str_appends(&querystr, " (");
-	
+
 	zend_hash_internal_pointer_reset_ex(Z_ARRVAL_P(var_array), &pos);
 	while ((key_type = zend_hash_get_current_key_ex(Z_ARRVAL_P(var_array), &fld,
-					&fld_len, &num_idx, 0, &pos)) != HASH_KEY_NON_EXISTANT) {
+					&fld_len, &num_idx, 0, &pos)) != HASH_KEY_NON_EXISTENT) {
 		if (key_type == HASH_KEY_IS_LONG) {
 			php_error_docref(NULL TSRMLS_CC, E_NOTICE, "Expects associative array for values to be inserted");
 			goto cleanup;
@@ -6018,7 +6392,7 @@ PHP_PGSQL_API int php_pgsql_update(PGconn *pg_link, const char *table, zval *var
 	}
 
 	smart_str_appends(&querystr, "UPDATE ");
-	smart_str_appends(&querystr, table);
+	build_tablename(&querystr, pg_link, table);
 	smart_str_appends(&querystr, " SET ");
 
 	if (build_assignment_string(&querystr, Z_ARRVAL_P(var_array), 0, ",", 1 TSRMLS_CC))
@@ -6119,7 +6493,7 @@ PHP_PGSQL_API int php_pgsql_delete(PGconn *pg_link, const char *table, zval *ids
 	}
 
 	smart_str_appends(&querystr, "DELETE FROM ");
-	smart_str_appends(&querystr, table);
+	build_tablename(&querystr, pg_link, table);
 	smart_str_appends(&querystr, " WHERE ");
 
 	if (build_assignment_string(&querystr, Z_ARRVAL_P(ids_array), 1, " AND ", sizeof(" AND ")-1 TSRMLS_CC))
@@ -6255,7 +6629,7 @@ PHP_PGSQL_API int php_pgsql_select(PGconn *pg_link, const char *table, zval *ids
 	}
 
 	smart_str_appends(&querystr, "SELECT * FROM ");
-	smart_str_appends(&querystr, table);
+	build_tablename(&querystr, pg_link, table);
 	smart_str_appends(&querystr, " WHERE ");
 
 	if (build_assignment_string(&querystr, Z_ARRVAL_P(ids_array), 1, " AND ", sizeof(" AND ")-1 TSRMLS_CC))

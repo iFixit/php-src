@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2012 The PHP Group                                |
+  | Copyright (c) 1997-2014 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -161,8 +161,8 @@ enum {
 	PDO_MYSQL_ATTR_READ_DEFAULT_FILE,
 	PDO_MYSQL_ATTR_READ_DEFAULT_GROUP,
 	PDO_MYSQL_ATTR_MAX_BUFFER_SIZE,
-	PDO_MYSQL_ATTR_COMPRESS,
 #endif
+	PDO_MYSQL_ATTR_COMPRESS,
 	PDO_MYSQL_ATTR_DIRECT_QUERY,
 	PDO_MYSQL_ATTR_FOUND_ROWS,
 	PDO_MYSQL_ATTR_IGNORE_SPACE,
@@ -170,7 +170,10 @@ enum {
 	PDO_MYSQL_ATTR_SSL_CERT,
 	PDO_MYSQL_ATTR_SSL_CA,
 	PDO_MYSQL_ATTR_SSL_CAPATH,
-	PDO_MYSQL_ATTR_SSL_CIPHER
+	PDO_MYSQL_ATTR_SSL_CIPHER,
+#if MYSQL_VERSION_ID > 50605 || defined(PDO_USE_MYSQLND)
+	PDO_MYSQL_ATTR_SERVER_PUBLIC_KEY
+#endif
 };
 
 #endif

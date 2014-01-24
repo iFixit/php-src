@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2012 The PHP Group                                |
+   | Copyright (c) 1997-2014 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -648,7 +648,7 @@ _php_mb_regex_init_options(const char *parg, int narg, OnigOptionType *option, O
 /* }}} */
 
 /*
- * php funcions
+ * php functions
  */
 
 /* {{{ proto string mb_regex_encoding([string encoding])
@@ -784,7 +784,7 @@ PHP_FUNCTION(mb_eregi)
 /* }}} */
 
 /* {{{ _php_mb_regex_ereg_replace_exec */
-static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOptionType options)
+static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOptionType options, int is_callable)
 {
 	zval **arg_pattern_zval;
 
@@ -793,6 +793,9 @@ static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOp
 
 	char *replace;
 	int replace_len;
+
+	zend_fcall_info arg_replace_fci;
+	zend_fcall_info_cache arg_replace_fci_cache;
 
 	char *string;
 	int string_len;
@@ -826,12 +829,22 @@ static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOp
 		char *option_str = NULL;
 		int option_str_len = 0;
 
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Zss|s",
-									&arg_pattern_zval,
-									&replace, &replace_len,
-									&string, &string_len,
-									&option_str, &option_str_len) == FAILURE) {
-			RETURN_FALSE;
+		if (!is_callable) {
+			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Zss|s",
+						&arg_pattern_zval,
+						&replace, &replace_len,
+						&string, &string_len,
+						&option_str, &option_str_len) == FAILURE) {
+				RETURN_FALSE;
+			}
+		} else {
+			if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "Zfs|s",
+						&arg_pattern_zval,
+						&arg_replace_fci, &arg_replace_fci_cache,
+						&string, &string_len,
+						&option_str, &option_str_len) == FAILURE) {
+				RETURN_FALSE;
+			}
 		}
 
 		if (option_str != NULL) {
@@ -859,12 +872,19 @@ static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOp
 		RETURN_FALSE;
 	}
 
-	if (eval) {
+	if (eval || is_callable) {
 		pbuf = &eval_buf;
 		description = zend_make_compiled_string_description("mbregex replace" TSRMLS_CC);
 	} else {
 		pbuf = &out_buf;
 		description = NULL;
+	}
+
+	if (is_callable) {
+		if (eval) {
+			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Option 'e' cannot be used with replacement callback");
+			RETURN_FALSE;
+		}
 	}
 
 	/* do the actual work */
@@ -889,28 +909,32 @@ static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOp
 #endif
 			/* copy the part of the string before the match */
 			smart_str_appendl(&out_buf, pos, (size_t)((OnigUChar *)(string + regs->beg[0]) - pos));
-			/* copy replacement and backrefs */
-			i = 0;
-			p = replace;
-			while (i < replace_len) {
-				int fwd = (int) php_mb_mbchar_bytes_ex(p, enc);
-				n = -1;
-				if ((replace_len - i) >= 2 && fwd == 1 &&
+
+			if (!is_callable) {
+				/* copy replacement and backrefs */
+				i = 0;
+				p = replace;
+				while (i < replace_len) {
+					int fwd = (int) php_mb_mbchar_bytes_ex(p, enc);
+					n = -1;
+					if ((replace_len - i) >= 2 && fwd == 1 &&
 					p[0] == '\\' && p[1] >= '0' && p[1] <= '9') {
-					n = p[1] - '0';
-				}
-				if (n >= 0 && n < regs->num_regs) {
-					if (regs->beg[n] >= 0 && regs->beg[n] < regs->end[n] && regs->end[n] <= string_len) {
-						smart_str_appendl(pbuf, string + regs->beg[n], regs->end[n] - regs->beg[n]);
+						n = p[1] - '0';
 					}
-					p += 2;
-					i += 2;
-				} else {
-					smart_str_appendl(pbuf, p, fwd);
-					p += fwd;
-					i += fwd;
+					if (n >= 0 && n < regs->num_regs) {
+						if (regs->beg[n] >= 0 && regs->beg[n] < regs->end[n] && regs->end[n] <= string_len) {
+							smart_str_appendl(pbuf, string + regs->beg[n], regs->end[n] - regs->beg[n]);
+						}
+						p += 2;
+						i += 2;
+					} else {
+						smart_str_appendl(pbuf, p, fwd);
+						p += fwd;
+						i += fwd;
+					}
 				}
 			}
+				
 			if (eval) {
 				zval v;
 				/* null terminate buffer */
@@ -928,7 +952,40 @@ static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOp
 				/* Clean up */
 				eval_buf.len = 0;
 				zval_dtor(&v);
+			} else if (is_callable) {
+				zval *retval_ptr;
+				zval **args[1];
+				zval *subpats;
+				int i;
+				
+				MAKE_STD_ZVAL(subpats);
+				array_init(subpats);
+				
+				for (i = 0; i < regs->num_regs; i++) {
+					add_next_index_stringl(subpats, string + regs->beg[i], regs->end[i] - regs->beg[i], 1);
+				}				
+				
+				args[0] = &subpats;
+				/* null terminate buffer */
+				smart_str_0(&eval_buf);
+				
+				arg_replace_fci.param_count = 1;
+				arg_replace_fci.params = args;
+				arg_replace_fci.retval_ptr_ptr = &retval_ptr;
+				if (zend_call_function(&arg_replace_fci, &arg_replace_fci_cache TSRMLS_CC) == SUCCESS && arg_replace_fci.retval_ptr_ptr) {
+					convert_to_string_ex(&retval_ptr);
+					smart_str_appendl(&out_buf, Z_STRVAL_P(retval_ptr), Z_STRLEN_P(retval_ptr));
+					eval_buf.len = 0;
+					zval_ptr_dtor(&retval_ptr);
+				} else {
+					efree(description);
+					if (!EG(exception)) {
+						php_error_docref(NULL TSRMLS_CC, E_WARNING, "Unable to call custom replacement function");
+					}
+				}
+				zval_ptr_dtor(&subpats);
 			}
+
 			n = regs->end[0];
 			if ((pos - (OnigUChar *)string) < n) {
 				pos = (OnigUChar *)string + n;
@@ -969,7 +1026,7 @@ static void _php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAMETERS, OnigOp
    Replace regular expression for multibyte string */
 PHP_FUNCTION(mb_ereg_replace)
 {
-	_php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAM_PASSTHRU, 0);
+	_php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAM_PASSTHRU, 0, 0);
 }
 /* }}} */
 
@@ -977,7 +1034,15 @@ PHP_FUNCTION(mb_ereg_replace)
    Case insensitive replace regular expression for multibyte string */
 PHP_FUNCTION(mb_eregi_replace)
 {
-	_php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAM_PASSTHRU, ONIG_OPTION_IGNORECASE);
+	_php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAM_PASSTHRU, ONIG_OPTION_IGNORECASE, 0);
+}
+/* }}} */
+
+/* {{{ proto string mb_ereg_replace_callback(string pattern, string callback, string string [, string option])
+    regular expression for multibyte string using replacement callback */
+PHP_FUNCTION(mb_ereg_replace_callback)
+{
+	_php_mb_regex_ereg_replace_exec(INTERNAL_FUNCTION_PARAM_PASSTHRU, 0, 1);
 }
 /* }}} */
 
@@ -990,7 +1055,7 @@ PHP_FUNCTION(mb_split)
 	php_mb_regex_t *re;
 	OnigRegion *regs = NULL;
 	char *string;
-	OnigUChar *pos;
+	OnigUChar *pos, *chunk_pos;
 	int string_len;
 
 	int n, err;
@@ -1000,8 +1065,8 @@ PHP_FUNCTION(mb_split)
 		RETURN_FALSE;
 	} 
 
-	if (count == 0) {
-		count = 1;
+	if (count > 0) {
+		count--;
 	}
 
 	/* create regex pattern buffer */
@@ -1011,31 +1076,30 @@ PHP_FUNCTION(mb_split)
 
 	array_init(return_value);
 
-	pos = (OnigUChar *)string;
+	chunk_pos = pos = (OnigUChar *)string;
 	err = 0;
 	regs = onig_region_new();
 	/* churn through str, generating array entries as we go */
-	while ((--count != 0) &&
-		   (err = onig_search(re, (OnigUChar *)string, (OnigUChar *)(string + string_len), pos, (OnigUChar *)(string + string_len), regs, 0)) >= 0) {
-		if (regs->beg[0] == regs->end[0]) {
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Empty regular expression");
+	while (count != 0 && (pos - (OnigUChar *)string) < string_len) {
+		int beg, end;
+		err = onig_search(re, (OnigUChar *)string, (OnigUChar *)(string + string_len), pos, (OnigUChar *)(string + string_len), regs, 0);
+		if (err < 0) {
 			break;
 		}
-
+		beg = regs->beg[0], end = regs->end[0];
 		/* add it to the array */
-		if (regs->beg[0] < string_len && regs->beg[0] >= (pos - (OnigUChar *)string)) {
-			add_next_index_stringl(return_value, (char *)pos, ((OnigUChar *)(string + regs->beg[0]) - pos), 1);
+		if ((pos - (OnigUChar *)string) < end) {
+			if (beg < string_len && beg >= (chunk_pos - (OnigUChar *)string)) {
+				add_next_index_stringl(return_value, (char *)chunk_pos, ((OnigUChar *)(string + beg) - chunk_pos), 1);
+				--count;
+			} else {
+				err = -2;
+				break;
+			}
+			/* point at our new starting point */
+			chunk_pos = pos = (OnigUChar *)string + end;
 		} else {
-			err = -2;
-			break;
-		}
-		/* point at our new starting point */
-		n = regs->end[0];
-		if ((pos - (OnigUChar *)string) < n) {
-			pos = (OnigUChar *)string + n;
-		}
-		if (count < 0) {
-			count = 0;
+			pos++;
 		}
 		onig_region_free(regs, 0);
 	}
@@ -1052,9 +1116,9 @@ PHP_FUNCTION(mb_split)
 	}
 
 	/* otherwise we just have one last element to add to the array */
-	n = ((OnigUChar *)(string + string_len) - pos);
+	n = ((OnigUChar *)(string + string_len) - chunk_pos);
 	if (n > 0) {
-		add_next_index_stringl(return_value, (char *)pos, n, 1);
+		add_next_index_stringl(return_value, (char *)chunk_pos, n, 1);
 	} else {
 		add_next_index_stringl(return_value, "", 0, 1);
 	}

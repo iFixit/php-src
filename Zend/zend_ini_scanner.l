@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1998-2012 Zend Technologies Ltd. (http://www.zend.com) |
+   | Copyright (c) 1998-2014 Zend Technologies Ltd. (http://www.zend.com) |
    +----------------------------------------------------------------------+
    | This source file is subject to version 2.00 of the Zend license,     |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -228,9 +228,12 @@ int zend_ini_open_file_for_scanning(zend_file_handle *fh, int scanner_mode TSRML
 	char *buf;
 	size_t size;
 
-	if (zend_stream_fixup(fh, &buf, &size TSRMLS_CC) == FAILURE ||
-		init_ini_scanner(scanner_mode, fh TSRMLS_CC) == FAILURE
-	) {
+	if (zend_stream_fixup(fh, &buf, &size TSRMLS_CC) == FAILURE) {
+		return FAILURE;
+	}
+
+	if (init_ini_scanner(scanner_mode, fh TSRMLS_CC) == FAILURE) {
+		zend_file_handle_dtor(fh TSRMLS_CC);
 		return FAILURE;
 	}
 
@@ -337,9 +340,9 @@ NEWLINE	("\r"|"\n"|"\r\n")
 TABS_AND_SPACES [ \t]
 WHITESPACE [ \t]+
 CONSTANT [a-zA-Z_][a-zA-Z0-9_]*
-LABEL [^=\n\r\t;|&$~(){}!"\[]+
-TOKENS [:,.\[\]"'()|^&+-/*=%$!~<>?@{}]
-OPERATORS [&|~()!]
+LABEL [^=\n\r\t;&|^$~(){}!"\[]+
+TOKENS [:,.\[\]"'()&|^+-/*=%$!~<>?@{}]
+OPERATORS [&|^~()!]
 DOLLAR_CURLY "${"
 
 SECTION_RAW_CHARS [^\]\n\r]
@@ -347,7 +350,7 @@ SINGLE_QUOTED_CHARS [^']
 RAW_VALUE_CHARS [^\n\r;\000]
 
 LITERAL_DOLLAR ("$"([^{\000]|("\\"{ANY_CHAR})))
-VALUE_CHARS         ([^$= \t\n\r;&|~()!"'\000]|{LITERAL_DOLLAR})
+VALUE_CHARS         ([^$= \t\n\r;&|^~()!"'\000]|{LITERAL_DOLLAR})
 SECTION_VALUE_CHARS ([^$\n\r;"'\]\\]|("\\"{ANY_CHAR})|{LITERAL_DOLLAR})
 
 <!*> := yyleng = YYCURSOR - SCNG(yy_text);
@@ -442,11 +445,39 @@ SECTION_VALUE_CHARS ([^$\n\r;"'\]\\]|("\\"{ANY_CHAR})|{LITERAL_DOLLAR})
 	return '=';
 }
 
-<ST_RAW>{RAW_VALUE_CHARS}+ { /* Raw value, only used when SCNG(scanner_mode) == ZEND_INI_SCANNER_RAW. */
+<ST_RAW>{RAW_VALUE_CHARS} { /* Raw value, only used when SCNG(scanner_mode) == ZEND_INI_SCANNER_RAW. */
+	char *sc = NULL;
+	while (YYCURSOR < YYLIMIT) {
+		switch (*YYCURSOR) {
+			case '\n':
+			case '\r':
+				goto end_raw_value_chars;
+				break;
+			case ';':
+				if (sc == NULL) {
+					sc = YYCURSOR;
+				}
+				/* no break */
+			default:
+				YYCURSOR++;
+				break;
+		}
+	}
+end_raw_value_chars:
+	yyleng = YYCURSOR - SCNG(yy_text);
+
+	/* Eat trailing semicolons */
+	while (yytext[yyleng - 1] == ';') {
+		yyleng--;
+	}
+
 	/* Eat leading and trailing double quotes */
 	if (yytext[0] == '"' && yytext[yyleng - 1] == '"') {
 		SCNG(yy_text)++;
 		yyleng = yyleng - 2;
+	} else if (sc) {
+		YYCURSOR = sc;
+		yyleng = YYCURSOR - SCNG(yy_text);
 	}
 	RETURN_TOKEN(TC_RAW, yytext, yyleng);
 }

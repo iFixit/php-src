@@ -27,7 +27,7 @@
 #include "file.h"
 
 #ifndef	lint
-FILE_RCSID("@(#)$File: funcs.c,v 1.53 2009/04/07 11:07:00 christos Exp $")
+FILE_RCSID("@(#)$File: funcs.c,v 1.61 2012/10/30 23:11:51 christos Exp $")
 #endif	/* lint */
 
 #include "magic.h"
@@ -45,6 +45,12 @@ FILE_RCSID("@(#)$File: funcs.c,v 1.53 2009/04/07 11:07:00 christos Exp $")
 #ifndef SIZE_MAX 
 # define SIZE_MAX ((size_t) -1) 
 #endif
+
+#ifndef PREG_OFFSET_CAPTURE
+# define PREG_OFFSET_CAPTURE                 (1<<8)
+#endif
+
+extern public void convert_libmagic_pattern(zval *pattern, int options);
 
 /*
  * Like printf, only we append to a buffer.
@@ -79,19 +85,17 @@ file_printf(struct magic_set *ms, const char *fmt, ...)
 /*VARARGS*/
 private void
 file_error_core(struct magic_set *ms, int error, const char *f, va_list va,
-    uint32_t lineno)
+    size_t lineno)
 {
 	char *buf = NULL;
 	
 	/* Only the first error is ok */
-	if (ms->event_flags & EVENT_HAD_ERR) {
+	if (ms->event_flags & EVENT_HAD_ERR)
 		return;
-	}
-	
 	if (lineno != 0) {
 		efree(ms->o.buf);
 		ms->o.buf = NULL;
-		file_printf(ms, "line %u: ", lineno);
+		file_printf(ms, "line %" SIZE_T_FORMAT "u: ", lineno);
 	}
 
 	vspprintf(&buf, 0, f, va);
@@ -137,7 +141,8 @@ file_magerror(struct magic_set *ms, const char *f, ...)
 protected void
 file_oomem(struct magic_set *ms, size_t len)
 {
-	file_error(ms, errno, "cannot allocate %zu bytes", len);
+	file_error(ms, errno, "cannot allocate %" SIZE_T_FORMAT "u bytes",
+	    len);
 }
 
 protected void
@@ -158,7 +163,7 @@ file_buffer(struct magic_set *ms, php_stream *stream, const char *inname, const 
 {
 	int m = 0, rv = 0, looks_text = 0;
 	int mime = ms->flags & MAGIC_MIME;
-	const unsigned char *ubuf = buf;
+	const unsigned char *ubuf = CAST(const unsigned char *, buf);
 	unichar *u8buf = NULL;
 	size_t ulen;
 	const char *code = NULL;
@@ -186,7 +191,7 @@ file_buffer(struct magic_set *ms, php_stream *stream, const char *inname, const 
 		    &code, &code_mime, &type);
 	}
 
-#if defined(__EMX__)
+#ifdef __EMX__
 	if ((ms->flags & MAGIC_NO_CHECK_APPTYPE) == 0 && inname) {
 		switch (file_os2_apptype(ms, inname, buf, nb)) {
 		case -1:
@@ -205,9 +210,8 @@ file_buffer(struct magic_set *ms, php_stream *stream, const char *inname, const 
 			if ((ms->flags & MAGIC_DEBUG) != 0)
 				(void)fprintf(stderr, "zmagic %d\n", m);
 			goto done;
- 	}
+		}
 #endif
-
 	/* Check if we have a tar file */
 	if ((ms->flags & MAGIC_NO_CHECK_TAR) == 0)
 		if ((m = file_is_tar(ms, ubuf, nb)) != 0) {
@@ -231,7 +235,8 @@ file_buffer(struct magic_set *ms, php_stream *stream, const char *inname, const 
 
 	/* try soft magic tests */
 	if ((ms->flags & MAGIC_NO_CHECK_SOFT) == 0)
-		if ((m = file_softmagic(ms, ubuf, nb, BINTEST)) != 0) {
+		if ((m = file_softmagic(ms, ubuf, nb, BINTEST,
+		    looks_text)) != 0) {
 			if ((ms->flags & MAGIC_DEBUG) != 0)
 				(void)fprintf(stderr, "softmagic %d\n", m);
 #ifdef BUILTIN_ELF
@@ -255,10 +260,10 @@ file_buffer(struct magic_set *ms, php_stream *stream, const char *inname, const 
 			goto done;
 		}
 
-	/* try text properties (and possibly text tokens) */
+	/* try text properties */
 	if ((ms->flags & MAGIC_NO_CHECK_TEXT) == 0) {
 
-		if ((m = file_ascmagic(ms, ubuf, nb)) != 0) {
+		if ((m = file_ascmagic(ms, ubuf, nb, looks_text)) != 0) {
 			if ((ms->flags & MAGIC_DEBUG) != 0)
 				(void)fprintf(stderr, "ascmagic %d\n", m);
 			goto done;
@@ -268,7 +273,8 @@ file_buffer(struct magic_set *ms, php_stream *stream, const char *inname, const 
 		if ((ms->flags & MAGIC_NO_CHECK_ENCODING) == 0) {
 			if (looks_text == 0)
 				if ((m = file_ascmagic_with_encoding( ms, ubuf,
-				    nb, u8buf, ulen, code, type)) != 0) {
+				    nb, u8buf, ulen, code, type, looks_text))
+				    != 0) {
 					if ((ms->flags & MAGIC_DEBUG) != 0)
 						(void)fprintf(stderr,
 						    "ascmagic/enc %d\n", m);
@@ -291,8 +297,7 @@ file_buffer(struct magic_set *ms, php_stream *stream, const char *inname, const 
 		if (file_printf(ms, "%s", code_mime) == -1)
 			rv = -1;
 	}
-	if (u8buf)
-		free(u8buf);
+	free(u8buf);
 	if (rv)
 		return rv;
 
@@ -302,7 +307,7 @@ file_buffer(struct magic_set *ms, php_stream *stream, const char *inname, const 
 protected int
 file_reset(struct magic_set *ms)
 {
-	if (ms->mlist == NULL) {
+	if (ms->mlist[0] == NULL) {
 		file_error(ms, 0, "no magic files loaded");
 		return -1;
 	}
@@ -330,7 +335,7 @@ file_reset(struct magic_set *ms)
 protected const char *
 file_getbuffer(struct magic_set *ms)
 {
-	char *pbuf, *op, *np;
+	char *op, *np;
 	size_t psize, len;
 
 	if (ms->event_flags & EVENT_HAD_ERR)
@@ -348,8 +353,10 @@ file_getbuffer(struct magic_set *ms)
 		return NULL;
 	}
 	psize = len * 4 + 1;
-	pbuf = erealloc(ms->o.pbuf, psize);
-	ms->o.pbuf = pbuf;
+	if ((ms->o.pbuf = CAST(char *, erealloc(ms->o.pbuf, psize))) == NULL) {
+		file_oomem(ms, psize);
+		return NULL;
+	}
 
 #if defined(HAVE_WCHAR_H) && defined(HAVE_MBRTOWC) && defined(HAVE_WCWIDTH)
 	{
@@ -390,9 +397,9 @@ file_getbuffer(struct magic_set *ms)
 	}
 #endif
 
-	for (np = ms->o.pbuf, op = ms->o.buf; *op; op++) {
+	for (np = ms->o.pbuf, op = ms->o.buf; *op;) {
 		if (isprint((unsigned char)*op)) {
-			*np++ = *op;
+			*np++ = *op++;
 		} else {
 			OCTALIFY(np, op);
 		}
@@ -408,7 +415,13 @@ file_check_mem(struct magic_set *ms, unsigned int level)
 
 	if (level >= ms->c.len) {
 		len = (ms->c.len += 20) * sizeof(*ms->c.li);
-		ms->c.li = (ms->c.li == NULL) ? emalloc(len) : erealloc(ms->c.li, len);
+		ms->c.li = CAST(struct level_info *, (ms->c.li == NULL) ?
+		    emalloc(len) :
+		    erealloc(ms->c.li, len));
+		if (ms->c.li == NULL) {
+			file_oomem(ms, len);
+			return -1;
+		}
 	}
 	ms->c.li[level].got_match = 0;
 #ifdef ENABLE_CONDITIONALS
@@ -417,3 +430,54 @@ file_check_mem(struct magic_set *ms, unsigned int level)
 #endif /* ENABLE_CONDITIONALS */
 	return 0;
 }
+
+protected size_t
+file_printedlen(const struct magic_set *ms)
+{
+	return ms->o.buf == NULL ? 0 : strlen(ms->o.buf);
+}
+
+
+protected int 
+file_replace(struct magic_set *ms, const char *pat, const char *rep)
+{
+	zval *patt;
+	int opts = 0;
+	pcre_cache_entry *pce;
+	char *res;
+	zval *repl;
+	int res_len, rep_cnt = 0;
+	TSRMLS_FETCH();
+
+	MAKE_STD_ZVAL(patt);
+	ZVAL_STRINGL(patt, pat, strlen(pat), 0);
+	opts |= PCRE_MULTILINE;
+	convert_libmagic_pattern(patt, opts);
+	if ((pce = pcre_get_compiled_regex_cache(Z_STRVAL_P(patt), Z_STRLEN_P(patt) TSRMLS_CC)) == NULL) {
+		zval_dtor(patt);
+		FREE_ZVAL(patt);
+		return -1;
+	}
+
+	MAKE_STD_ZVAL(repl);
+	ZVAL_STRINGL(repl, rep, strlen(rep), 0);
+
+	res = php_pcre_replace_impl(pce, ms->o.buf, strlen(ms->o.buf), repl,
+			0, &res_len, -1, &rep_cnt TSRMLS_CC);
+
+	FREE_ZVAL(repl);
+	zval_dtor(patt);
+	FREE_ZVAL(patt);
+
+	if (NULL == res) {
+		return -1;
+	}
+
+	strncpy(ms->o.buf, res, res_len);
+	ms->o.buf[res_len] = '\0';
+
+	efree(res);
+
+	return rep_cnt;
+}
+

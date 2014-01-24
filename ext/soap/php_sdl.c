@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2012 The PHP Group                                |
+  | Copyright (c) 1997-2014 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -40,8 +40,8 @@ static void delete_binding(void *binding);
 static void delete_binding_persistent(void *binding);
 static void delete_function(void *function);
 static void delete_function_persistent(void *function);
-static void delete_parameter(void *paramater);
-static void delete_parameter_persistent(void *paramater);
+static void delete_parameter(void *parameter);
+static void delete_parameter_persistent(void *parameter);
 static void delete_header(void *header);
 static void delete_header_persistent(void *header);
 static void delete_document(void *doc_ptr);
@@ -2644,16 +2644,17 @@ static sdlAttributePtr make_persistent_sdl_attribute(sdlAttributePtr attr, HashT
 
 		zend_hash_internal_pointer_reset(pattr->extraAttributes);
 		while (zend_hash_get_current_data(attr->extraAttributes, (void**)&tmp) == SUCCESS) {
-			pextra = malloc(sizeof(sdlExtraAttribute));
-			memset(pextra, 0, sizeof(sdlExtraAttribute));
-			if ((*tmp)->ns) {
-				pextra->ns = strdup((*tmp)->ns);
-			}
-			if ((*tmp)->val) {
-				pextra->val = strdup((*tmp)->val);
-			}
+			if (zend_hash_get_current_key_ex(attr->extraAttributes, &key, &key_len, &index, 0, NULL) == HASH_KEY_IS_STRING) {			
+				pextra = malloc(sizeof(sdlExtraAttribute));
+				memset(pextra, 0, sizeof(sdlExtraAttribute));
 
-			if (zend_hash_get_current_key_ex(attr->extraAttributes, &key, &key_len, &index, 0, NULL) == HASH_KEY_IS_STRING) {
+				if ((*tmp)->ns) {
+					pextra->ns = strdup((*tmp)->ns);
+				}
+				if ((*tmp)->val) {
+					pextra->val = strdup((*tmp)->val);
+				}
+			
 				zend_hash_add(pattr->extraAttributes, key, key_len, (void*)&pextra, sizeof(sdlExtraAttributePtr), NULL);
 			}
 
@@ -3196,6 +3197,8 @@ sdlPtr get_sdl(zval *this_ptr, char *uri, long cache_wsdl TSRMLS_DC)
 	smart_str headers = {0};
 	char* key = NULL;
 	time_t t = time(0);
+	zend_bool has_proxy_authorization = 0;
+	zend_bool has_authorization = 0;
 
 	if (strchr(uri,':') != NULL || IS_ABSOLUTE_PATH(uri, uri_len)) {
 		uri_len = strlen(uri);
@@ -3259,6 +3262,13 @@ sdlPtr get_sdl(zval *this_ptr, char *uri, long cache_wsdl TSRMLS_DC)
 		context = php_stream_context_alloc(TSRMLS_C);
 	}
 
+	if (zend_hash_find(Z_OBJPROP_P(this_ptr), "_user_agent", sizeof("_user_agent"), (void **) &tmp) == SUCCESS &&
+	    Z_TYPE_PP(tmp) == IS_STRING && Z_STRLEN_PP(tmp) > 0) {	
+		smart_str_appends(&headers, "User-Agent: ");
+		smart_str_appends(&headers, Z_STRVAL_PP(tmp));
+		smart_str_appends(&headers, "\r\n");
+	}
+
 	if (zend_hash_find(Z_OBJPROP_P(this_ptr), "_proxy_host", sizeof("_proxy_host"), (void **) &proxy_host) == SUCCESS &&
 	    Z_TYPE_PP(proxy_host) == IS_STRING &&
 	    zend_hash_find(Z_OBJPROP_P(this_ptr), "_proxy_port", sizeof("_proxy_port"), (void **) &proxy_port) == SUCCESS &&
@@ -3292,10 +3302,10 @@ sdlPtr get_sdl(zval *this_ptr, char *uri, long cache_wsdl TSRMLS_DC)
 			zval_ptr_dtor(&str_proxy);
 		}
 
-		proxy_authentication(this_ptr, &headers TSRMLS_CC);
+		has_proxy_authorization = proxy_authentication(this_ptr, &headers TSRMLS_CC);
 	}
 
-	basic_authentication(this_ptr, &headers TSRMLS_CC);
+	has_authorization = basic_authentication(this_ptr, &headers TSRMLS_CC);
 
 	/* Use HTTP/1.1 with "Connection: close" by default */
 	if (php_stream_context_get_option(context, "http", "protocol_version", &tmp) == FAILURE) {
@@ -3304,7 +3314,7 @@ sdlPtr get_sdl(zval *this_ptr, char *uri, long cache_wsdl TSRMLS_DC)
 		ZVAL_DOUBLE(http_version, 1.1);
 		php_stream_context_set_option(context, "http", "protocol_version", http_version);
 		zval_ptr_dtor(&http_version);
-		smart_str_appendl(&headers, "Connection: close", sizeof("Connection: close")-1);
+		smart_str_appendl(&headers, "Connection: close\r\n", sizeof("Connection: close\r\n")-1);
 	}
 
 	if (headers.len > 0) {
@@ -3312,6 +3322,8 @@ sdlPtr get_sdl(zval *this_ptr, char *uri, long cache_wsdl TSRMLS_DC)
 
 		if (!context) {
 			context = php_stream_context_alloc(TSRMLS_C);
+		} else {
+			http_context_headers(context, has_authorization, has_proxy_authorization, 0, &headers TSRMLS_CC);
 		}
 
 		smart_str_0(&headers);
