@@ -364,7 +364,8 @@ ZEND_API int zend_print_zval_ex(zend_write_func_t write_func, zval *expr, int in
 
 ZEND_API int zend_print_zval_escape(zval *expr, int indent) /* {{{ */
 {
-	if (EG(__auto_escape)) {
+	// If this is an instance of our special HTML string
+	if (EG(__auto_escape) && !(Z_TYPE_P(expr) == IS_OBJECT && strcmp(Z_OBJ_CLASS_NAME_P(expr), "HtmlString") == 0)) {
 		return zend_print_zval_ex(escape_write, expr, indent);
 	} else {
 		return zend_print_zval_ex(zend_write, expr, indent);
