@@ -27,7 +27,7 @@
 #include "file.h"
 
 #ifndef lint
-FILE_RCSID("@(#)$File: cdf_time.c,v 1.6 2009/03/10 11:44:29 christos Exp $")
+FILE_RCSID("@(#)$File: cdf_time.c,v 1.12 2012/05/15 17:14:36 christos Exp $")
 #endif
 
 #include <time.h>
@@ -104,26 +104,27 @@ cdf_timestamp_to_timespec(struct timeval *ts, cdf_timestamp_t t)
 #endif
 	int rdays;
 
+	/* XXX 5.14 at least introdced 100 ns intervals, this is to do */
 	/* Time interval, in microseconds */
 	ts->tv_usec = (t % CDF_TIME_PREC) * CDF_TIME_PREC;
 
 	t /= CDF_TIME_PREC;
-	tm.tm_sec = t % 60;
+	tm.tm_sec = (int)(t % 60);
 	t /= 60;
 
-	tm.tm_min = t % 60;
+	tm.tm_min = (int)(t % 60);
 	t /= 60;
 
-	tm.tm_hour = t % 24;
+	tm.tm_hour = (int)(t % 24);
 	t /= 24;
 
 	/* XXX: Approx */
-	tm.tm_year = CDF_BASE_YEAR + (t / 365);
+	tm.tm_year = (int)(CDF_BASE_YEAR + (t / 365));
 
 	rdays = cdf_getdays(tm.tm_year);
-	t -= rdays;
-	tm.tm_mday = cdf_getday(tm.tm_year, t);
-	tm.tm_mon = cdf_getmonth(tm.tm_year, t);
+	t -= rdays - 1;
+	tm.tm_mday = cdf_getday(tm.tm_year, (int)t);
+	tm.tm_mon = cdf_getmonth(tm.tm_year, (int)t);
 	tm.tm_wday = 0;
 	tm.tm_yday = 0;
 	tm.tm_isdst = 0;
@@ -143,10 +144,13 @@ cdf_timestamp_to_timespec(struct timeval *ts, cdf_timestamp_t t)
 }
 
 int
+/*ARGSUSED*/
 cdf_timespec_to_timestamp(cdf_timestamp_t *t, const struct timeval *ts)
 {
+#ifndef __lint__
 	(void)&t;
 	(void)&ts;
+#endif
 #ifdef notyet
 	struct tm tm;
 	if (gmtime_r(&ts->ts_sec, &tm) == NULL) {
@@ -162,18 +166,29 @@ cdf_timespec_to_timestamp(cdf_timestamp_t *t, const struct timeval *ts)
 	return 0;
 }
 
+char *
+cdf_ctime(const time_t *sec, char *buf)
+{
+	char *ptr = ctime_r(sec, buf);
+	if (ptr != NULL)
+		return buf;
+	(void)snprintf(buf, 26, "*Bad* 0x%16.16llx\n", (long long)*sec);
+	return buf;
+}
+
 
 #ifdef TEST
 int
 main(int argc, char *argv[])
 {
 	struct timeval ts;
+	char buf[25];
 	static const cdf_timestamp_t tst = 0x01A5E403C2D59C00ULL;
 	static const char *ref = "Sat Apr 23 01:30:00 1977";
 	char *p, *q;
 
 	cdf_timestamp_to_timespec(&ts, tst);
-	p = ctime(&ts.tv_sec);
+	p = cdf_ctime(&ts.tv_sec, buf);
 	if ((q = strchr(p, '\n')) != NULL)
 		*q = '\0';
 	if (strcmp(ref, p) != 0)

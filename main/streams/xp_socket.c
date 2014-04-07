@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2012 The PHP Group                                |
+  | Copyright (c) 1997-2014 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -194,7 +194,7 @@ static int php_sockop_close(php_stream *stream, int close_handle TSRMLS_DC)
 			 * Essentially, we are waiting for the socket to become writeable, which means
 			 * that all pending data has been sent.
 			 * We use a small timeout which should encourage the OS to send the data,
-			 * but at the same time avoid hanging indefintely.
+			 * but at the same time avoid hanging indefinitely.
 			 * */
 			do {
 				n = php_pollfd_for_ms(sock->socket, POLLOUT, 500);
@@ -426,7 +426,7 @@ static int php_sockop_cast(php_stream *stream, int castas, void **ret TSRMLS_DC)
 		case PHP_STREAM_AS_FD:
 		case PHP_STREAM_AS_SOCKETD:
 			if (ret)
-				*(int*)ret = sock->socket;
+				*(php_socket_t *)ret = sock->socket;
 			return SUCCESS;
 		default:
 			return FAILURE;
@@ -510,6 +510,9 @@ static inline int parse_unix_address(php_stream_xport_param *xparam, struct sock
 		 * BUT, to get into this branch of code, the name is too long,
 		 * so we don't care. */
 		xparam->inputs.namelen = sizeof(unix_addr->sun_path) - 1;
+		php_error_docref(NULL TSRMLS_CC, E_NOTICE,
+			"socket path exceeded the maximum allowed length of %lu bytes "
+			"and was truncated", (unsigned long)sizeof(unix_addr->sun_path));
 	}
 
 	memcpy(unix_addr->sun_path, xparam->inputs.name, xparam->inputs.namelen);

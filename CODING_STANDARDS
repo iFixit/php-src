@@ -2,11 +2,11 @@
   PHP Coding Standards
 ========================
 
-This file lists several standards that any programmer, adding or changing
-code in PHP, should follow.  Since this file was added at a very late
+This file lists several standards that any programmer adding or changing
+code in PHP should follow.  Since this file was added at a very late
 stage of the development of PHP v3.0, the code base does not (yet) fully
 follow it, but it's going in that general direction.  Since we are now
-well into the version 4 releases, many sections have been recoded to use
+well into version 5 releases, many sections have been recoded to use
 these rules.
 
 Code Implementation
@@ -59,8 +59,8 @@ Exceptions:
     you're calling.
 
 7.  When commenting out code using a #if statement, do NOT use 0 only. Instead
-    use "<svn username here>_0". For example, #if FOO_0, where FOO is your
-    svn user foo.  This allows easier tracking of why code was commented out,
+    use "<git username here>_0". For example, #if FOO_0, where FOO is your
+    git user foo.  This allows easier tracking of why code was commented out,
     especially in bundled libraries.
 
 8.  Do not define functions that are not available.  For instance, if a
@@ -151,7 +151,7 @@ Naming Conventions
 
 7.  Classes should be given descriptive names. Avoid using abbreviations where
     possible. Each word in the class name should start with a capital letter,
-    without underscore delimiters (CampelCaps starting with a capital letter).
+    without underscore delimiters (CamelCaps starting with a capital letter).
     The class name should be prefixed with the name of the 'parent set' (e.g.
     the name of the extension)::
 

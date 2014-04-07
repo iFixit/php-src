@@ -1,5 +1,5 @@
 --TEST--
-Bug #60159	(Router returns false, but POST is not passed to requested resource)
+Bug #60159 (Router returns false, but POST is not passed to requested resource)
 --SKIPIF--
 <?php
 include "skipif.inc"; 
@@ -40,7 +40,7 @@ fclose($fp);
 --EXPECTF--
 HTTP/1.1 200 OK
 Host: %s
-Connection: closed
+Connection: close
 X-Powered-By: PHP/%s
 Content-type: text/html
 

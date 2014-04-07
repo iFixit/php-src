@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2012 The PHP Group                                |
+  | Copyright (c) 1997-2014 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.0 of the PHP license,       |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -76,9 +76,9 @@ struct finfo_object {
 	} \
 }
 
-/* {{{ finfo_objects_dtor
+/* {{{ finfo_objects_free
  */
-static void finfo_objects_dtor(void *object, zend_object_handle handle TSRMLS_DC)
+static void finfo_objects_free(void *object TSRMLS_DC)
 {
 	struct finfo_object *intern = (struct finfo_object *) object;
 
@@ -107,7 +107,8 @@ PHP_FILEINFO_API zend_object_value finfo_objects_new(zend_class_entry *class_typ
 
 	intern->ptr = NULL;
 
-	retval.handle = zend_objects_store_put(intern, finfo_objects_dtor, NULL, NULL TSRMLS_CC);
+	retval.handle = zend_objects_store_put(intern, NULL,
+		finfo_objects_free, NULL TSRMLS_CC);
 	retval.handlers = (zend_object_handlers *) &finfo_object_handlers;
 
 	return retval;
@@ -269,11 +270,20 @@ ZEND_GET_MODULE(fileinfo)
 PHP_MINFO_FUNCTION(fileinfo)
 {
 	php_info_print_table_start();
-	php_info_print_table_header(2, "fileinfo support", "enabled");
+	php_info_print_table_row(2, "fileinfo support", "enabled");
 	php_info_print_table_row(2, "version", PHP_FILEINFO_VERSION);
 	php_info_print_table_end();
 }
 /* }}} */
+
+#define FILEINFO_DESTROY_OBJECT(object)							\
+	do {														\
+		if (object) {											\
+			zend_object_store_ctor_failed(object TSRMLS_CC);	\
+			zval_dtor(object);									\
+			ZVAL_NULL(object);									\
+		}														\
+	} while (0)
 
 /* {{{ proto resource finfo_open([int options [, string arg]])
    Create a new fileinfo resource. */
@@ -287,12 +297,13 @@ PHP_FUNCTION(finfo_open)
 	char resolved_path[MAXPATHLEN];
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "|lp", &options, &file, &file_len) == FAILURE) {
+		FILEINFO_DESTROY_OBJECT(object);
 		RETURN_FALSE;
 	}
-	
+
 	if (object) {
 		struct finfo_object *finfo_obj = (struct finfo_object*)zend_object_store_get_object(object TSRMLS_CC);
-		
+
 		if (finfo_obj->ptr) {
 			magic_close(finfo_obj->ptr->magic);
 			efree(finfo_obj->ptr);
@@ -309,9 +320,11 @@ PHP_FUNCTION(finfo_open)
 #else
 		if (php_check_open_basedir(file TSRMLS_CC)) {
 #endif
+			FILEINFO_DESTROY_OBJECT(object);
 			RETURN_FALSE;
 		}
 		if (!expand_filepath_with_mode(file, resolved_path, NULL, 0, CWD_EXPAND TSRMLS_CC)) {
+			FILEINFO_DESTROY_OBJECT(object);
 			RETURN_FALSE;
 		}
 		file = resolved_path;
@@ -325,21 +338,23 @@ PHP_FUNCTION(finfo_open)
 	if (finfo->magic == NULL) {
 		efree(finfo);
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid mode '%ld'.", options);
-		RETURN_FALSE;	
+		FILEINFO_DESTROY_OBJECT(object);
+		RETURN_FALSE;
 	}
 
 	if (magic_load(finfo->magic, file) == -1) {
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Failed to load magic database at '%s'.", file);
 		magic_close(finfo->magic);
 		efree(finfo);
+		FILEINFO_DESTROY_OBJECT(object);
 		RETURN_FALSE;
-	}	
+	}
 
 	if (object) {
 		FILEINFO_REGISTER_OBJECT(object, finfo);
 	} else {
 		ZEND_REGISTER_RESOURCE(return_value, finfo, le_fileinfo);
-	}	
+	}
 }
 /* }}} */
 
@@ -495,11 +510,22 @@ static void _php_finfo_get_type(INTERNAL_FUNCTION_PARAMETERS, int mode, int mime
 			wrap = php_stream_locate_url_wrapper(buffer, &tmp2, 0 TSRMLS_CC);
 
 			if (wrap) {
+				php_stream *stream;
 				php_stream_context *context = php_stream_context_from_zval(zcontext, 0);
+
+#ifdef PHP_WIN32
+				if (php_stream_stat_path_ex(buffer, 0, &ssb, context) == SUCCESS) {
+					if (ssb.sb.st_mode & S_IFDIR) {
+						ret_val = mime_directory;
+						goto common;
+					}
+				}
+#endif
+
 #if PHP_API_VERSION < 20100412
-				php_stream *stream = php_stream_open_wrapper_ex(buffer, "rb", ENFORCE_SAFE_MODE | REPORT_ERRORS, NULL, context);
+				stream = php_stream_open_wrapper_ex(buffer, "rb", ENFORCE_SAFE_MODE | REPORT_ERRORS, NULL, context);
 #else
-				php_stream *stream = php_stream_open_wrapper_ex(buffer, "rb", REPORT_ERRORS, NULL, context);
+				stream = php_stream_open_wrapper_ex(buffer, "rb", REPORT_ERRORS, NULL, context);
 #endif
 
 				if (!stream) {

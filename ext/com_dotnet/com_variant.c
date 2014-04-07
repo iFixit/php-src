@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2012 The PHP Group                                |
+   | Copyright (c) 1997-2014 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -53,7 +53,7 @@ static void safe_array_from_zval(VARIANT *v, zval *z, int codepage TSRMLS_DC)
 
 		if (HASH_KEY_IS_STRING == keytype) {
 			goto bogus;
-		} else if (HASH_KEY_NON_EXISTANT == keytype) {
+		} else if (HASH_KEY_NON_EXISTENT == keytype) {
 			break;
 		}
 		if (intindex > max_index) {
@@ -98,12 +98,13 @@ bogus:
 	}
 }
 
-PHPAPI void php_com_variant_from_zval(VARIANT *v, zval *z, int codepage TSRMLS_DC)
+PHP_COM_DOTNET_API void php_com_variant_from_zval(VARIANT *v, zval *z, int codepage TSRMLS_DC)
 {
 	OLECHAR *olestring;
 	php_com_dotnet_object *obj;
+	zend_uchar ztype = (z == NULL ? IS_NULL : Z_TYPE_P(z));
 	
-	switch (Z_TYPE_P(z)) {
+	switch (ztype) {
 		case IS_NULL:
 			V_VT(v) = VT_NULL;
 			break;
@@ -166,7 +167,7 @@ PHPAPI void php_com_variant_from_zval(VARIANT *v, zval *z, int codepage TSRMLS_D
 	}
 }
 
-PHPAPI int php_com_zval_from_variant(zval *z, VARIANT *v, int codepage TSRMLS_DC)
+PHP_COM_DOTNET_API int php_com_zval_from_variant(zval *z, VARIANT *v, int codepage TSRMLS_DC)
 {
 	OLECHAR *olestring = NULL;
 	int ret = SUCCESS;
@@ -258,7 +259,7 @@ PHPAPI int php_com_zval_from_variant(zval *z, VARIANT *v, int codepage TSRMLS_DC
 }
 
 
-PHPAPI int php_com_copy_variant(VARIANT *dstvar, VARIANT *srcvar TSRMLS_DC)
+PHP_COM_DOTNET_API int php_com_copy_variant(VARIANT *dstvar, VARIANT *srcvar TSRMLS_DC)
 {
 	int ret = SUCCESS;
 	
@@ -429,7 +430,7 @@ PHP_FUNCTION(com_variant_create_instance)
 		/* If already an array and VT_ARRAY is passed then:
 			- if only VT_ARRAY passed then do not perform a conversion
 			- if VT_ARRAY plus other type passed then perform conversion 
-			  but will probably fail (origional behavior)
+			  but will probably fail (original behavior)
 		*/
 		if ((vt & VT_ARRAY) && (V_VT(&obj->v) & VT_ARRAY)) {
 			long orig_vt = vt;

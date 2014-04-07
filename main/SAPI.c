@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2012 The PHP Group                                |
+   | Copyright (c) 1997-2014 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -137,6 +137,7 @@ PHP_FUNCTION(header_register_callback)
 		efree(callback_name);
 		RETURN_FALSE;
 	}
+
 	efree(callback_name);
 
 	if (SG(callback_func)) {
@@ -144,10 +145,10 @@ PHP_FUNCTION(header_register_callback)
 		SG(fci_cache) = empty_fcall_info_cache;
 	}
 
-	Z_ADDREF_P(callback_func);
-
 	SG(callback_func) = callback_func;
-	
+
+	Z_ADDREF_P(SG(callback_func));
+
 	RETURN_TRUE;
 }
 /* }}} */
@@ -156,24 +157,30 @@ static void sapi_run_header_callback(TSRMLS_D)
 {
 	int   error;
 	zend_fcall_info fci;
+	char *callback_name = NULL;
+	char *callback_error = NULL;
 	zval *retval_ptr = NULL;
-
-	fci.size = sizeof(fci);
-	fci.function_table = EG(function_table);
-	fci.object_ptr = NULL;
-	fci.function_name = SG(callback_func);
-	fci.retval_ptr_ptr = &retval_ptr;
-	fci.param_count = 0;
-	fci.params = NULL;
-	fci.no_separation = 0;
-	fci.symbol_table = NULL;
-
-	error = zend_call_function(&fci, &SG(fci_cache) TSRMLS_CC);
-	if (error == FAILURE) {
+	
+	if (zend_fcall_info_init(SG(callback_func), 0, &fci, &SG(fci_cache), &callback_name, &callback_error TSRMLS_CC) == SUCCESS) {
+		fci.retval_ptr_ptr = &retval_ptr;
+		
+		error = zend_call_function(&fci, &SG(fci_cache) TSRMLS_CC);
+		if (error == FAILURE) {
+			goto callback_failed;
+		} else if (retval_ptr) {
+			zval_ptr_dtor(&retval_ptr);
+		}
+	} else {
+callback_failed:
 		php_error_docref(NULL TSRMLS_CC, E_WARNING, "Could not call the sapi_header_callback");
-	} else if (retval_ptr) {
-		zval_ptr_dtor(&retval_ptr);
 	}
+	
+	if (callback_name) {
+		efree(callback_name);
+	}
+	if (callback_error) {
+		efree(callback_error);
+	}	
 }
 
 SAPI_API void sapi_handle_post(void *arg TSRMLS_DC)
@@ -494,9 +501,6 @@ static void sapi_send_headers_free(TSRMLS_D)
 SAPI_API void sapi_deactivate(TSRMLS_D)
 {
 	zend_llist_destroy(&SG(sapi_headers).headers);
-	if (SG(callback_func)) {
-		zval_ptr_dtor(&SG(callback_func));
-	}
 	if (SG(request_info).post_data) {
 		efree(SG(request_info).post_data);
 	}  else 	if (SG(server_context)) {
@@ -590,10 +594,36 @@ static void sapi_update_response_code(int ncode TSRMLS_DC)
 	SG(sapi_headers).http_response_code = ncode;
 }
 
-static int sapi_find_matching_header(void *element1, void *element2)
-{
-	int len = strlen((char*)element2);
-	return strncasecmp(((sapi_header_struct*)element1)->header, (char*)element2, len) == 0 && ((sapi_header_struct*)element1)->header[len] == ':';
+/* 
+ * since zend_llist_del_element only remove one matched item once,
+ * we should remove them by ourself
+ */
+static void sapi_remove_header(zend_llist *l, char *name, uint len) {
+	sapi_header_struct *header;
+	zend_llist_element *next;
+	zend_llist_element *current=l->head;
+
+	while (current) {
+		header = (sapi_header_struct *)(current->data);
+		next = current->next;
+		if (header->header_len > len && header->header[len] == ':'
+				&& !strncasecmp(header->header, name, len)) {
+			if (current->prev) {
+				current->prev->next = next;
+			} else {
+				l->head = next;
+			}
+			if (next) {
+				next->prev = current->prev;
+			} else {
+				l->tail = current->prev;
+			}
+			sapi_free_header(header);
+			efree(current);
+			--l->count;
+		}
+		current = next;
+	}
 }
 
 SAPI_API int sapi_add_header_ex(char *header_line, uint header_line_len, zend_bool duplicate, zend_bool replace TSRMLS_DC)
@@ -624,7 +654,7 @@ static void sapi_header_add_op(sapi_header_op_enum op, sapi_header_struct *sapi_
 				char sav = *colon_offset;
 
 				*colon_offset = 0;
-				zend_llist_del_element(&SG(sapi_headers).headers, sapi_header->header, (int(*)(void*, void*))sapi_find_matching_header);
+		        sapi_remove_header(&SG(sapi_headers).headers, sapi_header->header, strlen(sapi_header->header));
 				*colon_offset = sav;
 			}
 		}
@@ -706,20 +736,30 @@ SAPI_API int sapi_header_op(sapi_header_op_enum op, void *arg TSRMLS_DC)
 			sapi_header.header_len = header_line_len;
 			sapi_module.header_handler(&sapi_header, op, &SG(sapi_headers) TSRMLS_CC);
 		}
-		zend_llist_del_element(&SG(sapi_headers).headers, header_line, (int(*)(void*, void*))sapi_find_matching_header);
+		sapi_remove_header(&SG(sapi_headers).headers, header_line, header_line_len);
 		efree(header_line);
 		return SUCCESS;
 	} else {
-		/* new line safety check */
-		char *s = header_line, *e = header_line + header_line_len, *p;
-		while (s < e && ((p = memchr(s, '\n', (e - s))) || (p = memchr(s, '\r', (e - s))))) {
-			if (*(p + 1) == ' ' || *(p + 1) == '\t') {
-				s = p + 1;
-				continue;
+		/* new line/NUL character safety check */
+		int i;
+		for (i = 0; i < header_line_len; i++) {
+			/* RFC 2616 allows new lines if followed by SP or HT */
+			int illegal_break =
+					(header_line[i+1] != ' ' && header_line[i+1] != '\t')
+					&& (
+						header_line[i] == '\n'
+						|| (header_line[i] == '\r' && header_line[i+1] != '\n'));
+			if (illegal_break) {
+				efree(header_line);
+				sapi_module.sapi_error(E_WARNING, "Header may not contain "
+						"more than a single header, new line detected");
+				return FAILURE;
 			}
-			efree(header_line);
-			sapi_module.sapi_error(E_WARNING, "Header may not contain more than a single header, new line detected.");
-			return FAILURE;
+			if (header_line[i] == '\0') {
+				efree(header_line);
+				sapi_module.sapi_error(E_WARNING, "Header may not contain NUL bytes");
+				return FAILURE;
+			}
 		}
 	}
 
@@ -983,7 +1023,9 @@ SAPI_API char *sapi_getenv(char *name, size_t name_len TSRMLS_DC)
 		} else {
 			return NULL;
 		}
-		sapi_module.input_filter(PARSE_ENV, name, &value, strlen(value), NULL TSRMLS_CC);
+		if (sapi_module.input_filter) {
+			sapi_module.input_filter(PARSE_STRING, name, &value, strlen(value), NULL TSRMLS_CC);
+		}
 		return value;
 	}
 	return NULL;

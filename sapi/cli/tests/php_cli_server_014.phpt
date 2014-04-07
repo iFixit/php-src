@@ -13,6 +13,10 @@ list($host, $port) = explode(':', PHP_CLI_SERVER_ADDRESS);
 $port = intval($port)?:80;
 $output = '';
 
+// note: select() on Windows (& some other platforms) has historical issues with
+//       timeouts less than 1000 millis(0.5). it may be better to increase these
+//       timeouts to 1000 millis(1.0) (fsockopen eventually calls select()).
+//       see articles like: http://support.microsoft.com/kb/257821
 $fp = fsockopen($host, $port, $errno, $errstr, 0.5);
 if (!$fp) {
   die("connect failed");
@@ -53,7 +57,7 @@ HEADER
 	}
 }
 
-echo preg_replace("/<style type=\"text\/css\">(.*?)<\/style>/s", "<style type=\"text/css\">AAA</style>", $output), "\n";
+echo preg_replace("/<style>(.*?)<\/style>/s", "<style>AAA</style>", $output), "\n";
 fclose($fp);
 
 ?>
@@ -61,16 +65,16 @@ fclose($fp);
 
 HTTP/1.1 200 OK
 Host: %s
-Connection: closed
+Connection: close
 X-Powered-By: %s
 Content-type: %s
 
 done
 HTTP/1.1 404 Not Found
 Host: %s
-Connection: closed
+Connection: close
 Content-Type: %s
 Content-Length: %d
 
-<html><head><title>404 Not Found</title><style type="text/css">AAA</style>
-</head><body><h1 class="h">Not Found</h1><p>The requested resource /main/no-exists.php was not found on this server.</p></body></html>
+<!doctype html><html><head><title>404 Not Found</title><style>AAA</style>
+</head><body><h1>Not Found</h1><p>The requested resource <code class="url">/main/no-exists.php</code> was not found on this server.</p></body></html>

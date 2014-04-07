@@ -37,7 +37,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2012 The PHP Group                                |
+   | Copyright (c) 1997-2014 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -502,7 +502,7 @@ static XMLRPC_VECTOR_TYPE determine_vector_type (HashTable *ht)
 			}
 			bArray = 1;
 			last_num = num_index;
-		} else if (res == HASH_KEY_NON_EXISTANT) {
+		} else if (res == HASH_KEY_NON_EXISTENT) {
 			break;
 		} else if (res == HASH_KEY_IS_STRING) {
 			if (bArray) {
@@ -582,7 +582,7 @@ static XMLRPC_VALUE PHP_to_XMLRPC_worker (const char* key, zval* in_val, int dep
 							int res = my_zend_hash_get_current_key(Z_ARRVAL_P(val_arr), &my_key, &num_index);
 
 							switch (res) {
-								case HASH_KEY_NON_EXISTANT:
+								case HASH_KEY_NON_EXISTENT:
 									break;
 								case HASH_KEY_IS_STRING:
 								case HASH_KEY_IS_LONG:
@@ -1043,9 +1043,8 @@ PHP_FUNCTION(xmlrpc_server_register_method)
 		 */
 		if (XMLRPC_ServerRegisterMethod(server->server_ptr, method_key, php_xmlrpc_callback)) {
 			/* save for later use */
-			MAKE_STD_ZVAL(method_name_save);
-			*method_name_save = **method_name;
-			zval_copy_ctor(method_name_save);
+			ALLOC_ZVAL(method_name_save);
+			MAKE_COPY_ZVAL(method_name, method_name_save);
 
 			/* register our php method */
 			add_zval(server->method_map, method_key, &method_name_save);
@@ -1073,9 +1072,8 @@ PHP_FUNCTION(xmlrpc_server_register_introspection_callback)
 
 	if (type == le_xmlrpc_server) {
 		/* save for later use */
-		MAKE_STD_ZVAL(method_name_save);
-		*method_name_save = **method_name;
-		zval_copy_ctor(method_name_save);
+		ALLOC_ZVAL(method_name_save);
+		MAKE_COPY_ZVAL(method_name, method_name_save);
 
 		/* register our php method */
 		add_zval(server->introspection_map, NULL, &method_name_save);
@@ -1242,8 +1240,7 @@ PHP_FUNCTION(xmlrpc_parse_method_descriptions)
 			retval = XMLRPC_to_PHP(xVal);
 
 			if (retval) {
-				*return_value = *retval;
-				zval_copy_ctor(return_value);
+				RETVAL_ZVAL(retval, 1, 1);
 			}
 			/* dust, sweep, and mop */
 			XMLRPC_CleanupValue(xVal);

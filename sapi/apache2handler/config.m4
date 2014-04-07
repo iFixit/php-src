@@ -3,7 +3,7 @@ dnl $Id$
 dnl
 
 PHP_ARG_WITH(apxs2,,
-[  --with-apxs2[=FILE]     Build shared Apache 2.0 Handler module. FILE is the optional
+[  --with-apxs2[=FILE]       Build shared Apache 2.0 Handler module. FILE is the optional
                           pathname to the Apache apxs tool [apxs]], no, no)
 
 AC_MSG_CHECKING([for Apache 2.0 handler-module support via DSO through APXS])
@@ -38,7 +38,6 @@ if test "$PHP_APXS2" != "no"; then
   APXS_BINDIR=`$APXS -q BINDIR`
   APXS_HTTPD=`$APXS -q SBINDIR`/`$APXS -q TARGET`
   APXS_CFLAGS=`$APXS -q CFLAGS`
-  APXS_MPM=`$APXS -q MPM_NAME`
   APU_BINDIR=`$APXS -q APU_BINDIR`
   APR_BINDIR=`$APXS -q APR_BINDIR`
 
@@ -62,7 +61,7 @@ if test "$PHP_APXS2" != "no"; then
   # Test that we're trying to configure with apache 2.x
   PHP_AP_EXTRACT_VERSION($APXS_HTTPD)
   if test "$APACHE_VERSION" -le 2000000; then
-    AC_MSG_ERROR([You have enabled Apache 2 support while your server is Apache 1.3.  Please use the appropiate switch --with-apxs (without the 2)])
+    AC_MSG_ERROR([You have enabled Apache 2 support while your server is Apache 1.3.  Please use the appropriate switch --with-apxs (without the 2)])
   elif test "$APACHE_VERSION" -lt 2000044; then
     AC_MSG_ERROR([Please note that Apache version >= 2.0.44 is required])
   fi
@@ -117,8 +116,16 @@ if test "$PHP_APXS2" != "no"; then
     ;;
   esac
 
-  if test "$APXS_MPM" != "prefork" && test "$APXS_MPM" != "peruser" && test "$APXS_MPM" != "itk"; then
-    PHP_BUILD_THREAD_SAFE
+  if test "$APACHE_VERSION" -lt 2004001; then
+    APXS_MPM=`$APXS -q MPM_NAME`
+    if test "$APXS_MPM" != "prefork" && test "$APXS_MPM" != "peruser" && test "$APXS_MPM" != "itk"; then
+      PHP_BUILD_THREAD_SAFE
+    fi
+  else
+    APACHE_THREADED_MPM=`$APXS_HTTPD -V | grep 'threaded:.*yes'`
+    if test -n "$APACHE_THREADED_MPM"; then
+      PHP_BUILD_THREAD_SAFE
+    fi
   fi
   AC_MSG_RESULT(yes)
   PHP_SUBST(APXS)

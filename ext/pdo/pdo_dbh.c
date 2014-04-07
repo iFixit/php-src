@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2012 The PHP Group                                |
+  | Copyright (c) 1997-2014 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -338,11 +338,15 @@ static PHP_METHOD(PDO, dbh_constructor)
 			if (pdbh->std.properties) {
 				zend_hash_destroy(dbh->std.properties);	
 				efree(dbh->std.properties);
+				if (dbh->std.properties_table) {
+					efree(dbh->std.properties_table);
+				}
 			} else {
 				pdbh->std.ce = dbh->std.ce;
 				pdbh->def_stmt_ce = dbh->def_stmt_ce;
 				pdbh->def_stmt_ctor_args = dbh->def_stmt_ctor_args;
 				pdbh->std.properties = dbh->std.properties;
+				pdbh->std.properties_table = dbh->std.properties_table;
 			}
 			/* kill the non-persistent thingamy */
 			efree(dbh);
@@ -456,7 +460,7 @@ static void pdo_stmt_construct(pdo_stmt_t *stmt, zval *object, zend_class_entry 
 	if (dbstmt_ce->constructor) {
 		zend_fcall_info fci;
 		zend_fcall_info_cache fcc;
-		zval *retval;
+		zval *retval = NULL;
 
 		fci.size = sizeof(zend_fcall_info);
 		fci.function_table = &dbstmt_ce->function_table;
@@ -491,7 +495,7 @@ static void pdo_stmt_construct(pdo_stmt_t *stmt, zval *object, zend_class_entry 
 			zval_dtor(object);
 			ZVAL_NULL(object);
 			object = NULL; /* marks failure */
-		} else {
+		} else if (retval) {
 			zval_ptr_dtor(&retval);
 		}
 			
@@ -699,7 +703,7 @@ static PHP_METHOD(PDO, inTransaction)
 		RETURN_BOOL(dbh->in_txn);
 	}	
 
-	RETURN_LONG(dbh->methods->in_transaction(dbh TSRMLS_CC));
+	RETURN_BOOL(dbh->methods->in_transaction(dbh TSRMLS_CC));
 }
 /* }}} */
 
@@ -895,7 +899,7 @@ static PHP_METHOD(PDO, getAttribute)
 	PDO_DBH_CLEAR_ERR();
 	PDO_CONSTRUCT_CHECK;
 
-	/* handle generic PDO-level atributes */
+	/* handle generic PDO-level attributes */
 	switch (attr) {
 		case PDO_ATTR_PERSISTENT:
 			RETURN_BOOL(dbh->is_persistent);
@@ -993,7 +997,7 @@ static PHP_METHOD(PDO, lastInsertId)
 		pdo_raise_impl_error(dbh, NULL, "IM001", "driver does not support lastInsertId()" TSRMLS_CC);
 		RETURN_FALSE;
 	} else {
-		Z_STRVAL_P(return_value) = dbh->methods->last_id(dbh, name, &Z_STRLEN_P(return_value) TSRMLS_CC);
+		Z_STRVAL_P(return_value) = dbh->methods->last_id(dbh, name, (unsigned int *)&Z_STRLEN_P(return_value) TSRMLS_CC);
 		if (!Z_STRVAL_P(return_value)) {
 			PDO_HANDLE_DBH_ERR();
 			RETURN_FALSE;
@@ -1574,6 +1578,7 @@ static void pdo_dbh_free_storage(pdo_dbh_t *dbh TSRMLS_DC)
 	}
 	zend_object_std_dtor(&dbh->std TSRMLS_CC);
 	dbh->std.properties = NULL;
+	dbh->std.properties_table = NULL;
 	dbh_free(dbh TSRMLS_CC);
 }
 
