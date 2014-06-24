@@ -850,7 +850,13 @@ default_socket_timeout = 60
 
 ; The flags to pass to html_special_chars() for auto-escaped content.
 ; Default is ENT_QUOTES == 3
-;__auto_escape = 3
+;__auto_escape_flags = 3
+
+; When using __auto_escape, if an instance of a class with this name
+; is outputted to short tags <?= $obj ?> its toString() will not be escaped and
+; will be passed directly to stdout.
+; Default is ""
+;__auto_escape_exempt_class = "HtmlString"
 
 ;;;;;;;;;;;;;;;;;;;;;;
 ; Dynamic Extensions ;

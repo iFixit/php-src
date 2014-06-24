@@ -97,35 +97,14 @@ static ZEND_INI_MH(OnUpdateScriptEncoding) /* {{{ */
 	return zend_multibyte_set_script_encoding_by_string(new_value, new_value_length TSRMLS_CC);
 }
 /* }}} */
-
-static ZEND_INI_MH(OnUpdateAutoEscape) /* {{{ */
-{
-	if (!new_value) {
-		EG(__auto_escape) = 0;
-	} else {
-		EG(__auto_escape) = atoi(new_value);
-	}
-	return SUCCESS;
-}
-/* }}} */
- 
-static ZEND_INI_MH(OnUpdateAutoEscapeFlags) /* {{{ */
-{
-	if (!new_value) {
-		EG(__auto_escape_flags) = 0;
-	} else {
-		EG(__auto_escape_flags) = atoi(new_value);
-	}
-	return SUCCESS;
-}
-/* }}} */
  
 
 ZEND_INI_BEGIN()
 	ZEND_INI_ENTRY("error_reporting",				NULL,		ZEND_INI_ALL,		OnUpdateErrorReporting)
 	STD_ZEND_INI_BOOLEAN("zend.enable_gc",				"1",	ZEND_INI_ALL,		OnUpdateGCEnabled,      gc_enabled,     zend_gc_globals,        gc_globals)
-	ZEND_INI_ENTRY("__auto_escape",			NULL,		ZEND_INI_ALL,		OnUpdateAutoEscape)
-	ZEND_INI_ENTRY("__auto_escape_flags",			"3",		ZEND_INI_ALL,		OnUpdateAutoEscapeFlags)
+	STD_ZEND_INI_BOOLEAN("__auto_escape",			"0",	ZEND_INI_ALL,	   OnUpdateBool,				__auto_escape,            zend_executor_globals, executor_globals)
+	STD_ZEND_INI_ENTRY("__auto_escape_flags",			"3",	ZEND_INI_ALL,		OnUpdateLong,			__auto_escape_flags,      zend_executor_globals, executor_globals)
+	STD_ZEND_INI_ENTRY("__auto_escape_exempt_class","",	ZEND_INI_ALL,		OnUpdateString,		__auto_escape_exempt_class,zend_executor_globals,executor_globals)
  	STD_ZEND_INI_BOOLEAN("zend.multibyte", "0", ZEND_INI_PERDIR, OnUpdateBool, multibyte,      zend_compiler_globals, compiler_globals)
  	ZEND_INI_ENTRY("zend.script_encoding",			NULL,		ZEND_INI_ALL,		OnUpdateScriptEncoding)
  	STD_ZEND_INI_BOOLEAN("zend.detect_unicode",			"1",	ZEND_INI_ALL,		OnUpdateBool, detect_unicode, zend_compiler_globals, compiler_globals)
@@ -364,7 +343,8 @@ ZEND_API int zend_print_zval_ex(zend_write_func_t write_func, zval *expr, int in
 
 ZEND_API int zend_print_zval_escape(zval *expr, int indent) /* {{{ */
 {
-	if (EG(__auto_escape)) {
+	// If this is an instance of our special HTML string
+	if (EG(__auto_escape) && !(Z_TYPE_P(expr) == IS_OBJECT && strcmp(Z_OBJ_CLASS_NAME_P(expr), EG(__auto_escape_exempt_class)) == 0)) {
 		return zend_print_zval_ex(escape_write, expr, indent);
 	} else {
 		return zend_print_zval_ex(zend_write, expr, indent);
