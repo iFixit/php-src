@@ -1753,7 +1753,7 @@ NEWLINE ("\r"|"\n"|"\r\n")
 		zendlval->value.str.len = yyleng;
 		zendlval->type = IS_STRING;
 		BEGIN(ST_IN_SCRIPTING);
-		return T_OPEN_TAG_WITH_ECHO_ESCAPE;
+		return T_OPEN_TAG_WITH_ECHO;
 	} else {
 		goto inline_char_handler;
 	}
@@ -1761,14 +1761,6 @@ NEWLINE ("\r"|"\n"|"\r\n")
 
 
 <INITIAL>"<?=" {
-	zendlval->value.str.val = yytext; /* no copying - intentional */
-	zendlval->value.str.len = yyleng;
-	zendlval->type = IS_STRING;
-	BEGIN(ST_IN_SCRIPTING);
-	return T_OPEN_TAG_WITH_ECHO_ESCAPE;
-}
-
-<INITIAL>"<?raw=" {
 	zendlval->value.str.val = yytext; /* no copying - intentional */
 	zendlval->value.str.len = yyleng;
 	zendlval->type = IS_STRING;
