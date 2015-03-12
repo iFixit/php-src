@@ -202,7 +202,6 @@ static YYSIZE_T zend_yytnamerr(char*, const char*);
 %token T_DOC_COMMENT     "doc comment (T_DOC_COMMENT)"
 %token T_OPEN_TAG        "open tag (T_OPEN_TAG)"
 %token T_OPEN_TAG_WITH_ECHO "open tag with echo (T_OPEN_TAG_WITH_ECHO)"
-%token T_OPEN_TAG_WITH_ECHO_ESCAPE "open tag with escaped echo (T_OPEN_TAG_WITH_ECHO_ESCAPE)"
 %token T_CLOSE_TAG       "close tag (T_CLOSE_TAG)"
 %token T_WHITESPACE      "whitespace (T_WHITESPACE)"
 %token T_START_HEREDOC   "heredoc start (T_START_HEREDOC)"
