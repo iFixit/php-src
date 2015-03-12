@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2014 The PHP Group                                |
+   | Copyright (c) 1997-2015 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -240,16 +240,12 @@ PHPAPI php_url *php_url_parse_ex(char const *str, int length)
 	/* check for login and password */
 	if ((p = zend_memrchr(s, '@', (e-s)))) {
 		if ((pp = memchr(s, ':', (p-s)))) {
-			if ((pp-s) > 0) {
-				ret->user = estrndup(s, (pp-s));
-				php_replace_controlchars_ex(ret->user, (pp - s));
-			}	
+			ret->user = estrndup(s, (pp-s));
+			php_replace_controlchars_ex(ret->user, (pp - s));
 		
 			pp++;
-			if (p-pp > 0) {
-				ret->pass = estrndup(pp, (p-pp));
-				php_replace_controlchars_ex(ret->pass, (p-pp));
-			}	
+			ret->pass = estrndup(pp, (p-pp));
+			php_replace_controlchars_ex(ret->pass, (p-pp));
 		} else {
 			ret->user = estrndup(s, (p-s));
 			php_replace_controlchars_ex(ret->user, (p-s));
@@ -267,7 +263,7 @@ PHPAPI php_url *php_url_parse_ex(char const *str, int length)
 	} else {
 		/* memrchr is a GNU specific extension
 		   Emulate for wide compatibility */
-		for(p = e; *p != ':' && p >= s; p--);
+		for(p = e; p >= s && *p != ':'; p--);
 	}
 
 	if (p >= s && *p == ':') {

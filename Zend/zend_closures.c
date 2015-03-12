@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1998-2014 Zend Technologies Ltd. (http://www.zend.com) |
+   | Copyright (c) 1998-2015 Zend Technologies Ltd. (http://www.zend.com) |
    +----------------------------------------------------------------------+
    | This source file is subject to version 2.00 of the Zend license,     |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -59,14 +59,8 @@ ZEND_METHOD(Closure, __invoke) /* {{{ */
 	} else if (call_user_function_ex(CG(function_table), NULL, this_ptr, &closure_result_ptr, ZEND_NUM_ARGS(), arguments, 1, NULL TSRMLS_CC) == FAILURE) {
 		RETVAL_FALSE;
 	} else if (closure_result_ptr) {
-		if (Z_ISREF_P(closure_result_ptr) && return_value_ptr) {
-			if (return_value) {
-				zval_ptr_dtor(&return_value);
-			}
-			*return_value_ptr = closure_result_ptr;
-		} else {
-			RETVAL_ZVAL(closure_result_ptr, 1, 1);
-		}
+		zval_ptr_dtor(&return_value);
+		*return_value_ptr = closure_result_ptr;
 	}
 	efree(arguments);
 
@@ -449,6 +443,7 @@ ZEND_API void zend_create_closure(zval *res, zend_function *func, zend_class_ent
 
 	closure->func = *func;
 	closure->func.common.prototype = NULL;
+	closure->func.common.fn_flags |= ZEND_ACC_CLOSURE;
 
 	if ((scope == NULL) && (this_ptr != NULL)) {
 		/* use dummy scope if we're binding an object without specifying a scope */
@@ -486,6 +481,7 @@ ZEND_API void zend_create_closure(zval *res, zend_function *func, zend_class_ent
 		}
 	}
 
+	closure->this_ptr = NULL;
 	/* Invariants:
 	 * If the closure is unscoped, it has no bound object.
 	 * The the closure is scoped, it's either static or it's bound */
@@ -497,10 +493,7 @@ ZEND_API void zend_create_closure(zval *res, zend_function *func, zend_class_ent
 			Z_ADDREF_P(this_ptr);
 		} else {
 			closure->func.common.fn_flags |= ZEND_ACC_STATIC;
-			closure->this_ptr = NULL;
 		}
-	} else {
-		closure->this_ptr = NULL;
 	}
 }
 /* }}} */

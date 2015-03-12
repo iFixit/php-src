@@ -334,7 +334,7 @@ static void php_parserr(PDNS_RECORD pRec, int type_to_fetch, int store, int raw,
 #endif
 
 		default:
-			/* unkown type */
+			/* unknown type */
 			zval_ptr_dtor(subarray);
 			*subarray = NULL;
 			return;
@@ -458,7 +458,7 @@ PHP_FUNCTION(dns_get_record)
 				if (status == DNS_INFO_NO_RECORDS || status == DNS_ERROR_RCODE_NAME_ERROR) {
 					continue;
 				} else {
-					php_error_docref(NULL TSRMLS_CC, E_WARNING, "Dns Query failed");
+					php_error_docref(NULL TSRMLS_CC, E_WARNING, "DNS Query failed");
 					zval_dtor(return_value);
 					RETURN_FALSE;
 				}

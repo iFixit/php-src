@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2014 The PHP Group                                |
+   | Copyright (c) 1997-2015 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -115,6 +115,7 @@ PHP_FUNCTION(solid_fetch_prev);
 #endif
 
 #define ODBC_TYPE "unixODBC"
+#undef ODBCVER
 #include <sql.h>
 #include <sqlext.h>
 #define HAVE_SQL_EXTENDED_FETCH 1
@@ -284,7 +285,11 @@ int odbc_bindcols(odbc_result *result TSRMLS_DC);
 
 void odbc_sql_error(ODBC_SQL_ERROR_PARAMS);
 
+#if defined(ODBCVER) && (ODBCVER >= 0x0300)
+#define IS_SQL_LONG(x) (x == SQL_LONGVARBINARY || x == SQL_LONGVARCHAR || x == SQL_WLONGVARCHAR)
+#else
 #define IS_SQL_LONG(x) (x == SQL_LONGVARBINARY || x == SQL_LONGVARCHAR)
+#endif
 #define IS_SQL_BINARY(x) (x == SQL_BINARY || x == SQL_VARBINARY || x == SQL_LONGVARBINARY)
 
 #ifdef ZTS

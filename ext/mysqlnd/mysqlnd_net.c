@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006-2014 The PHP Group                                |
+  | Copyright (c) 2006-2015 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -99,6 +99,7 @@ MYSQLND_METHOD(mysqlnd_net, network_write_ex)(MYSQLND_NET * const net, const zen
 {
 	size_t ret;
 	DBG_ENTER("mysqlnd_net::network_write_ex");
+	DBG_INF_FMT("sending %u bytes", count);
 	ret = php_stream_write(net->data->m.get_stream(net TSRMLS_CC), (char *)buffer, count);
 	DBG_RETURN(ret);
 }
@@ -357,6 +358,10 @@ MYSQLND_METHOD(mysqlnd_net, send_ex)(MYSQLND_NET * const net, zend_uchar * const
 
 	do {
 		to_be_sent = MIN(left, MYSQLND_MAX_PACKET_SIZE);
+		DBG_INF_FMT("to_be_sent=%u", to_be_sent);
+		DBG_INF_FMT("packets_sent=%u", packets_sent);
+		DBG_INF_FMT("compressed_envelope_packet_no=%u", net->compressed_envelope_packet_no);
+		DBG_INF_FMT("packet_no=%u", net->packet_no);
 #ifdef MYSQLND_COMPRESSION_ENABLED
 		if (net->data->compressed == TRUE) {
 			/* here we need to compress the data and then write it, first comes the compressed header */
@@ -929,7 +934,7 @@ MYSQLND_METHOD(mysqlnd_net, enable_ssl)(MYSQLND_NET * const net TSRMLS_DC)
 	DBG_RETURN(PASS);
 #else
 	DBG_ENTER("mysqlnd_net::enable_ssl");
-	DBG_INFO("MYSQLND_SSL_SUPPORTED is not defined");
+	DBG_INF("MYSQLND_SSL_SUPPORTED is not defined");
 	DBG_RETURN(PASS);
 #endif
 }

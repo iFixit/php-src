@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2014 The PHP Group                                |
+   | Copyright (c) 1997-2015 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -21,7 +21,11 @@
 #ifndef __TIMELIB_STRUCTS_H__
 #define __TIMELIB_STRUCTS_H__
 
-#include "timelib_config.h"
+#ifdef HAVE_TIMELIB_CONFIG_H
+# include "timelib_config.h"
+#endif
+
+#ifndef TIMELIB_OMIT_STDINT
 
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
@@ -33,11 +37,6 @@
 #include <stdint.h>
 #endif
 
-#ifdef PHP_WIN32
-/* TODO: Remove these hacks/defs once we have the int definitions in main/ 
-	 rathen than in each 2nd extension and win32/ */
-# include "win32/php_stdint.h"
-#else
 # ifndef HAVE_INT32_T
 #  if SIZEOF_INT == 4
 typedef int int32_t;
@@ -53,7 +52,62 @@ typedef unsigned int uint32_t;
 typedef unsigned long int uint32_t;
 #  endif
 # endif
+
+#ifdef _WIN32
+# if _MSC_VER >= 1600
+# include <stdint.h>
+# endif
+# ifndef SIZEOF_INT
+#  define SIZEOF_INT 4
+# endif
+# ifndef SIZEOF_LONG
+#  define SIZEOF_LONG 4
+# endif
+# ifndef int32_t
+typedef __int32           int32_t;
+# endif
+# ifndef uint32_t
+typedef unsigned __int32  uint32_t;
+# endif
+# ifndef int64_t
+typedef __int64           int64_t;
+# endif
+# ifndef uint64_t
+typedef unsigned __int64  uint64_t;
+# endif
+# ifndef PRId32
+#  define PRId32       "I32d"
+# endif
+# ifndef PRIu32
+#  define PRIu32       "I32u"
+# endif
+# ifndef PRId64
+#  define PRId64       "I64d"
+# endif
+# ifndef PRIu64
+#  define PRIu64       "I64u"
+# endif
+# ifndef INT32_MAX
+#define INT32_MAX    _I32_MAX
+# endif
+# ifndef INT32_MIN
+#define INT32_MIN    ((int32_t)_I32_MIN)
+# endif
+# ifndef UINT32_MAX
+#define UINT32_MAX   _UI32_MAX
+# endif
+# ifndef INT64_MIN
+#define INT64_MIN    ((int64_t)_I64_MIN)
+# endif
+# ifndef INT64_MAX
+#define INT64_MAX    _I64_MAX
+# endif
+# ifndef UINT64_MAX
+#define UINT64_MAX   _UI64_MAX
+# endif
 #endif
+
+#endif /* TIMELIB_OMIT_STDINT */
 
 #include <stdio.h>
 
@@ -171,6 +225,12 @@ typedef struct timelib_time {
 	                              *  3 TimeZone identifier,
 	                              *  2 TimeZone abbreviation */
 } timelib_time;
+
+typedef struct timelib_abbr_info {
+	timelib_sll  utc_offset;
+	char        *abbr;
+	int          dst;
+} timelib_abbr_info;
 
 typedef struct timelib_error_message {
 	int         position;

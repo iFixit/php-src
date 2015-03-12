@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2014 The PHP Group                                |
+   | Copyright (c) 1997-2015 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -82,6 +82,10 @@ static void php_free_ps_enc(zend_rsrc_list_entry *rsrc TSRMLS_DC);
 # endif
 #endif
 
+#if defined(HAVE_GD_XPM) && defined(HAVE_GD_BUNDLED)
+# include "X11/xpm.h"
+#endif
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -91,6 +95,10 @@ static void php_imagettftext_common(INTERNAL_FUNCTION_PARAMETERS, int, int);
 #endif
 
 #include "gd_ctx.c"
+
+/* as it is not really public, duplicate declaration here to avoid 
+   pointless warnings */
+int overflow2(int a, int b);
 
 /* Section Filters Declarations */
 /* IMPORTANT NOTE FOR NEW FILTER
@@ -1281,7 +1289,14 @@ PHP_MINFO_FUNCTION(gd)
 
 	/* need to use a PHPAPI function here because it is external module in windows */
 
+#if defined(HAVE_GD_BUNDLED)
 	php_info_print_table_row(2, "GD Version", PHP_GD_VERSION_STRING);
+#else
+	php_info_print_table_row(2, "GD headers Version", PHP_GD_VERSION_STRING);
+#if defined(HAVE_GD_LIBVERSION)
+	php_info_print_table_row(2, "GD library Version", gdVersionString());
+#endif
+#endif
 
 #ifdef ENABLE_GD_TTF
 	php_info_print_table_row(2, "FreeType Support", "enabled");
@@ -2088,7 +2103,7 @@ PHP_FUNCTION(imagerotate)
 
 	ZEND_FETCH_RESOURCE(im_src, gdImagePtr, &SIM, -1, "Image", le_gd);
 
-	im_dst = gdImageRotateInterpolated(im_src, (float)degrees, color);
+	im_dst = gdImageRotateInterpolated(im_src, (const float)degrees, color);
 
 	if (im_dst != NULL) {
 		ZEND_REGISTER_RESOURCE(return_value, im_dst, le_gd);
@@ -4879,7 +4894,7 @@ PHP_FUNCTION(imageconvolution)
 				if (zend_hash_index_find(Z_ARRVAL_PP(var), (j), (void **) &var2) == SUCCESS) {
 					if (Z_TYPE_PP(var2) != IS_DOUBLE) {
 						zval dval;
-						dval = **var;
+						dval = **var2;
 						zval_copy_ctor(&dval);
 						convert_to_double(&dval);
 						matrix[i][j] = (float)Z_DVAL(dval);
@@ -5101,40 +5116,36 @@ PHP_FUNCTION(imagescale)
 {
 	zval *IM;
 	gdImagePtr im;
-	gdImagePtr im_scaled;
-	int new_width, new_height = -1;
-	gdInterpolationMethod method = GD_BILINEAR_FIXED;
+	gdImagePtr im_scaled = NULL;
+	int new_width, new_height;
+	long tmp_w, tmp_h=-1, tmp_m = GD_BILINEAR_FIXED;
+	gdInterpolationMethod method;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rl|ll", &IM, &new_width, &new_height, &method) == FAILURE)  {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rl|ll", &IM, &tmp_w, &tmp_h, &tmp_m) == FAILURE)  {
 		return;
 	}
+	method = tmp_m;
 
 	ZEND_FETCH_RESOURCE(im, gdImagePtr, &IM, -1, "Image", le_gd);
-	im_scaled = gdImageScale(im, new_width, new_height);
-	goto finish;
-	switch (method) {
-		case GD_NEAREST_NEIGHBOUR:
-			im_scaled = gdImageScaleNearestNeighbour(im, new_width, new_height);
-			break;
 
-		case GD_BILINEAR_FIXED:
-			im_scaled = gdImageScaleBilinear(im, new_width, new_height);
-			break;
+	if (tmp_h < 0) {
+		/* preserve ratio */
+		long src_x, src_y;
 
-		case GD_BICUBIC:
-			im_scaled = gdImageScaleBicubicFixed(im, new_width, new_height);
-			break;
-
-		case GD_BICUBIC_FIXED:
-			im_scaled = gdImageScaleBicubicFixed(im, new_width, new_height);
-			break;
-
-		default:
-			im_scaled = gdImageScaleTwoPass(im, im->sx, im->sy, new_width, new_height);
-			break;
-
+		src_x = gdImageSX(im);
+		src_y = gdImageSY(im);
+		if (src_x) {
+			tmp_h = tmp_w * src_y / src_x;
+		}
 	}
-finish:
+
+	new_width = tmp_w;
+	new_height = tmp_h;
+
+	if (gdImageSetInterpolationMethod(im, method)) {
+		im_scaled = gdImageScale(im, new_width, new_height);
+	}
+
 	if (im_scaled == NULL) {
 		RETURN_FALSE;
 	} else {
@@ -5264,8 +5275,6 @@ PHP_FUNCTION(imageaffine)
 		pRect = NULL;
 	}
 
-
-	//int gdTransformAffineGetImage(gdImagePtr *dst, const gdImagePtr src, gdRectPtr src_area, const double affine[6]);
 	if (gdTransformAffineGetImage(&dst, src, pRect, affine) != GD_TRUE) {
 		RETURN_FALSE;
 	}
@@ -5284,7 +5293,7 @@ PHP_FUNCTION(imageaffinematrixget)
 {
 	double affine[6];
 	long type;
-	zval *options;
+	zval *options = NULL;
 	zval **tmp;
 	int res = GD_FALSE, i;
 
@@ -5296,8 +5305,9 @@ PHP_FUNCTION(imageaffinematrixget)
 		case GD_AFFINE_TRANSLATE:
 		case GD_AFFINE_SCALE: {
 			double x, y;
-			if (Z_TYPE_P(options) != IS_ARRAY) {
+			if (!options || Z_TYPE_P(options) != IS_ARRAY) {
 				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Array expected as options");
+				RETURN_FALSE;
 			}
 			if (zend_hash_find(HASH_OF(options), "x", sizeof("x"), (void **)&tmp) != FAILURE) {
 				if (Z_TYPE_PP(tmp) != IS_DOUBLE) {
@@ -5342,6 +5352,10 @@ PHP_FUNCTION(imageaffinematrixget)
 		case GD_AFFINE_SHEAR_VERTICAL: {
 			double angle;
 
+			if (!options) {
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Number is expected as option");
+				RETURN_FALSE;
+			}
 			convert_to_double_ex(&options);
 			angle = Z_DVAL_P(options);
 
