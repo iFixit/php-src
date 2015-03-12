@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2014 The PHP Group                                |
+   | Copyright (c) 1997-2015 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -157,6 +157,7 @@ static const opt_struct OPTIONS[] = {
 	{'R', 0, "allow-to-run-as-root"},
 	{'D', 0, "daemonize"},
 	{'F', 0, "nodaemonize"},
+	{'O', 0, "force-stderr"},
 	{'-', 0, NULL} /* end of args */
 };
 
@@ -498,8 +499,11 @@ static int sapi_cgi_read_post(char *buffer, uint count_bytes TSRMLS_DC)
 {
 	uint read_bytes = 0;
 	int tmp_read_bytes;
+	size_t remaining = SG(request_info).content_length - SG(read_post_bytes);
 
-	count_bytes = MIN(count_bytes, (uint) SG(request_info).content_length - SG(read_post_bytes));
+	if (remaining < count_bytes) {
+		count_bytes = remaining;
+	}
 	while (read_bytes < count_bytes) {
 		fcgi_request *request = (fcgi_request*) SG(server_context);
 		if (request_body_fd == -1) {
@@ -669,11 +673,15 @@ void sapi_cgi_log_fastcgi(int level, char *message, size_t len)
 	 * - the message is not empty
 	 */
 	if (CGIG(fcgi_logging) && request && message && len > 0) {
+		ssize_t ret;
 		char *buf = malloc(len + 2);
 		memcpy(buf, message, len);
 		memcpy(buf + len, "\n", sizeof("\n"));
-		fcgi_write(request, FCGI_STDERR, buf, len+1);
+		ret = fcgi_write(request, FCGI_STDERR, buf, len + 1);
 		free(buf);
+		if (ret < 0) {
+			php_handle_aborted_connection();
+		}
 	}
 }
 /* }}} */
@@ -918,7 +926,7 @@ static void php_cgi_usage(char *argv0)
 		prog = "php";
 	}
 
-	php_printf(	"Usage: %s [-n] [-e] [-h] [-i] [-m] [-v] [-t] [-p <prefix>] [-g <pid>] [-c <file>] [-d foo[=bar]] [-y <file>] [-D] [-F]\n"
+	php_printf(	"Usage: %s [-n] [-e] [-h] [-i] [-m] [-v] [-t] [-p <prefix>] [-g <pid>] [-c <file>] [-d foo[=bar]] [-y <file>] [-D] [-F [-O]]\n"
 				"  -c <path>|<file> Look for php.ini file in this directory\n"
 				"  -n               No php.ini file will be used\n"
 				"  -d foo[=bar]     Define INI entry foo with value 'bar'\n"
@@ -937,6 +945,8 @@ static void php_cgi_usage(char *argv0)
 				"  -D, --daemonize  force to run in background, and ignore daemonize option from config file\n"
 				"  -F, --nodaemonize\n"
 				"                   force to stay in foreground, and ignore daemonize option from config file\n"
+                                "  -O, --force-stderr\n"
+                                "                   force output to stderr in nodaemonize even if stderr is not a TTY\n"
 				"  -R, --allow-to-run-as-root\n"
 				"                   Allow pool to run as root (disabled by default)\n",
 				prog, PHP_PREFIX);
@@ -1142,13 +1152,16 @@ static void init_request_info(TSRMLS_D)
 				TRANSLATE_SLASHES(env_document_root);
 			}
 
-			if (env_path_translated != NULL && env_redirect_url != NULL &&
+			if (!apache_was_here && env_path_translated != NULL && env_redirect_url != NULL &&
 			    env_path_translated != script_path_translated &&
 			    strcmp(env_path_translated, script_path_translated) != 0) {
 				/*
 				 * pretty much apache specific.  If we have a redirect_url
 				 * then our script_filename and script_name point to the
 				 * php executable
+				 * we don't want to do this for the new mod_proxy_fcgi approach,
+				 * where redirect_url may also exist but the below will break
+				 * with rewrites to PATH_INFO, hence the !apache_was_here check
 				 */
 				script_path_translated = env_path_translated;
 				/* we correct SCRIPT_NAME now in case we don't have PATH_INFO */
@@ -1228,6 +1241,17 @@ static void init_request_info(TSRMLS_D)
 										SG(request_info).request_uri = orig_script_name;
 									}
 									path_info[0] = old;
+								} else if (apache_was_here && env_script_name) {
+									/* Using mod_proxy_fcgi and ProxyPass, apache cannot set PATH_INFO
+									 * As we can extract PATH_INFO from PATH_TRANSLATED
+									 * it is probably also in SCRIPT_NAME and need to be removed
+									 */
+									int snlen = strlen(env_script_name);
+									if (snlen>slen && !strcmp(env_script_name+snlen-slen, path_info)) {
+										_sapi_cgibin_putenv("ORIG_SCRIPT_NAME", orig_script_name TSRMLS_CC);
+										env_script_name[snlen-slen] = 0;
+										SG(request_info).request_uri = _sapi_cgibin_putenv("SCRIPT_NAME", env_script_name TSRMLS_CC);
+									}
 								}
 								env_path_info = _sapi_cgibin_putenv("PATH_INFO", path_info TSRMLS_CC);
 							}
@@ -1323,7 +1347,7 @@ static void init_request_info(TSRMLS_D)
 					efree(pt);
 				}
 			} else {
-				/* make sure path_info/translated are empty */
+				/* make sure original values are remembered in ORIG_ copies if we've changed them */
 				if (!orig_script_filename ||
 					(script_path_translated != orig_script_filename &&
 					strcmp(script_path_translated, orig_script_filename) != 0)) {
@@ -1332,7 +1356,9 @@ static void init_request_info(TSRMLS_D)
 					}
 					script_path_translated = _sapi_cgibin_putenv("SCRIPT_FILENAME", script_path_translated TSRMLS_CC);
 				}
-				if (env_redirect_url) {
+				if (!apache_was_here && env_redirect_url) {
+					/* if we used PATH_TRANSLATED to work around Apache mod_fastcgi (but not mod_proxy_fcgi,
+					 * hence !apache_was_here) weirdness, strip info accordingly */
 					if (orig_path_info) {
 						_sapi_cgibin_putenv("ORIG_PATH_INFO", orig_path_info TSRMLS_CC);
 						_sapi_cgibin_putenv("PATH_INFO", NULL TSRMLS_CC);
@@ -1350,7 +1376,7 @@ static void init_request_info(TSRMLS_D)
 				} else {
 					SG(request_info).request_uri = env_script_name;
 				}
-				free(real_path);
+				efree(real_path);
 			}
 		} else {
 			/* pre 4.3 behaviour, shouldn't be used but provides BC */
@@ -1569,6 +1595,7 @@ int main(int argc, char *argv[])
 	char *fpm_pid = NULL;
 	int test_conf = 0;
 	int force_daemon = -1;
+	int force_stderr = 0;
 	int php_information = 0;
 	int php_allow_to_run_as_root = 0;
 
@@ -1697,6 +1724,10 @@ int main(int argc, char *argv[])
 				force_daemon = 0;
 				break;
 
+			case 'O': /* force stderr even on non tty */
+				force_stderr = 1;
+				break;
+
 			default:
 			case 'h':
 			case '?':
@@ -1721,9 +1752,9 @@ int main(int argc, char *argv[])
 				SG(request_info).no_headers = 1;
 
 #if ZEND_DEBUG
-				php_printf("PHP %s (%s) (built: %s %s) (DEBUG)\nCopyright (c) 1997-2014 The PHP Group\n%s", PHP_VERSION, sapi_module.name, __DATE__,        __TIME__, get_zend_version());
+				php_printf("PHP %s (%s) (built: %s %s) (DEBUG)\nCopyright (c) 1997-2015 The PHP Group\n%s", PHP_VERSION, sapi_module.name, __DATE__,        __TIME__, get_zend_version());
 #else
-				php_printf("PHP %s (%s) (built: %s %s)\nCopyright (c) 1997-2014 The PHP Group\n%s", PHP_VERSION, sapi_module.name, __DATE__, __TIME__,      get_zend_version());
+				php_printf("PHP %s (%s) (built: %s %s)\nCopyright (c) 1997-2015 The PHP Group\n%s", PHP_VERSION, sapi_module.name, __DATE__, __TIME__,      get_zend_version());
 #endif
 				php_request_shutdown((void *) 0);
 				fcgi_shutdown();
@@ -1824,7 +1855,7 @@ consult the installation file that came with this distribution, or visit \n\
 		}
 	}
 
-	if (0 > fpm_init(argc, argv, fpm_config ? fpm_config : CGIG(fpm_config), fpm_prefix, fpm_pid, test_conf, php_allow_to_run_as_root, force_daemon)) {
+	if (0 > fpm_init(argc, argv, fpm_config ? fpm_config : CGIG(fpm_config), fpm_prefix, fpm_pid, test_conf, php_allow_to_run_as_root, force_daemon, force_stderr)) {
 
 		if (fpm_globals.send_config_pipe[1]) {
 			int writeval = 0;
@@ -1982,8 +2013,9 @@ fastcgi_request_done:
 out:
 
 	SG(server_context) = NULL;
+	php_module_shutdown(TSRMLS_C);
+
 	if (parent) {
-		php_module_shutdown(TSRMLS_C);
 		sapi_shutdown();
 	}
 

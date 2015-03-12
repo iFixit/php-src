@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2014 The PHP Group                                |
+  | Copyright (c) 1997-2015 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -31,6 +31,14 @@
 #include "php_json.h"
 #include <zend_exceptions.h>
 
+#include <float.h>
+#if defined(DBL_MANT_DIG) && defined(DBL_MIN_EXP)
+#define NUM_BUF_SIZE (3 + DBL_MANT_DIG - DBL_MIN_EXP)
+#else
+#define NUM_BUF_SIZE 1080
+#endif
+
+
 static PHP_MINFO_FUNCTION(json);
 static PHP_FUNCTION(json_encode);
 static PHP_FUNCTION(json_decode);
@@ -39,7 +47,7 @@ static PHP_FUNCTION(json_last_error_msg);
 
 static const char digits[] = "0123456789abcdef";
 
-zend_class_entry *php_json_serializable_ce;
+PHP_JSON_API zend_class_entry *php_json_serializable_ce;
 
 ZEND_DECLARE_MODULE_GLOBALS(json)
 
@@ -103,6 +111,7 @@ static PHP_MINIT_FUNCTION(json)
 	REGISTER_LONG_CONSTANT("JSON_PRETTY_PRINT", PHP_JSON_PRETTY_PRINT, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("JSON_UNESCAPED_UNICODE", PHP_JSON_UNESCAPED_UNICODE, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("JSON_PARTIAL_OUTPUT_ON_ERROR", PHP_JSON_PARTIAL_OUTPUT_ON_ERROR, CONST_CS | CONST_PERSISTENT);
+	REGISTER_LONG_CONSTANT("JSON_PRESERVE_ZERO_FRACTION", PHP_JSON_PRESERVE_ZERO_FRACTION, CONST_CS | CONST_PERSISTENT);
 
 	REGISTER_LONG_CONSTANT("JSON_ERROR_NONE", PHP_JSON_ERROR_NONE, CONST_CS | CONST_PERSISTENT);
 	REGISTER_LONG_CONSTANT("JSON_ERROR_DEPTH", PHP_JSON_ERROR_DEPTH, CONST_CS | CONST_PERSISTENT);
@@ -230,7 +239,7 @@ static inline void json_pretty_print_indent(smart_str *buf, int options TSRMLS_D
 
 static void json_encode_array(smart_str *buf, zval **val, int options TSRMLS_DC) /* {{{ */
 {
-	int i, r;
+	int i, r, need_comma = 0;
 	HashTable *myht;
 
 	if (Z_TYPE_PP(val) == IS_ARRAY) {
@@ -253,7 +262,6 @@ static void json_encode_array(smart_str *buf, zval **val, int options TSRMLS_DC)
 		smart_str_appendc(buf, '{');
 	}
 
-	json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
 	++JSON_G(encoder_depth);
 
 	i = myht ? zend_hash_num_elements(myht) : 0;
@@ -266,7 +274,6 @@ static void json_encode_array(smart_str *buf, zval **val, int options TSRMLS_DC)
 		uint key_len;
 		HashPosition pos;
 		HashTable *tmp_ht;
-		int need_comma = 0;
 
 		zend_hash_internal_pointer_reset_ex(myht, &pos);
 		for (;; zend_hash_move_forward_ex(myht, &pos)) {
@@ -283,11 +290,11 @@ static void json_encode_array(smart_str *buf, zval **val, int options TSRMLS_DC)
 				if (r == PHP_JSON_OUTPUT_ARRAY) {
 					if (need_comma) {
 						smart_str_appendc(buf, ',');
-						json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
 					} else {
 						need_comma = 1;
 					}
 
+					json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
 					json_pretty_print_indent(buf, options TSRMLS_CC);
 					php_json_encode(buf, *data, options TSRMLS_CC);
 				} else if (r == PHP_JSON_OUTPUT_OBJECT) {
@@ -302,11 +309,11 @@ static void json_encode_array(smart_str *buf, zval **val, int options TSRMLS_DC)
 
 						if (need_comma) {
 							smart_str_appendc(buf, ',');
-							json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
 						} else {
 							need_comma = 1;
 						}
 
+						json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
 						json_pretty_print_indent(buf, options TSRMLS_CC);
 
 						json_escape_string(buf, key, key_len - 1, options & ~PHP_JSON_NUMERIC_CHECK TSRMLS_CC);
@@ -318,11 +325,11 @@ static void json_encode_array(smart_str *buf, zval **val, int options TSRMLS_DC)
 					} else {
 						if (need_comma) {
 							smart_str_appendc(buf, ',');
-							json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
 						} else {
 							need_comma = 1;
 						}
 
+						json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
 						json_pretty_print_indent(buf, options TSRMLS_CC);
 
 						smart_str_appendc(buf, '"');
@@ -347,8 +354,12 @@ static void json_encode_array(smart_str *buf, zval **val, int options TSRMLS_DC)
 		JSON_G(error_code) = PHP_JSON_ERROR_DEPTH;
 	}
 	--JSON_G(encoder_depth);
-	json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
-	json_pretty_print_indent(buf, options TSRMLS_CC);
+
+	/* Only keep closing bracket on same line for empty arrays/objects */
+	if (need_comma) {
+		json_pretty_print_char(buf, options, '\n' TSRMLS_CC);
+		json_pretty_print_indent(buf, options TSRMLS_CC);
+	}
 
 	if (r == PHP_JSON_OUTPUT_ARRAY) {
 		smart_str_appendc(buf, ']');
@@ -380,7 +391,7 @@ static int json_utf8_to_utf16(unsigned short *utf16, char utf8[], int len) /* {{
 			}
 		}
 	} else {
-		/* Only check if utf8 string is valid, and compute utf16 lenght */
+		/* Only check if utf8 string is valid, and compute utf16 length */
 		for (j=0 ; pos < len ; j++) {
 			us = php_next_utf8_char((const unsigned char *)utf8, len, &pos, &status);
 			if (status != SUCCESS) {
@@ -418,10 +429,17 @@ static void json_escape_string(smart_str *buf, char *s, int len, int options TSR
 				smart_str_append_long(buf, p);
 			} else if (type == IS_DOUBLE) {
 				if (!zend_isinf(d) && !zend_isnan(d)) {
-					char *tmp;
-					int l = spprintf(&tmp, 0, "%.*k", (int) EG(precision), d);
-					smart_str_appendl(buf, tmp, l);
-					efree(tmp);
+					char num[NUM_BUF_SIZE];
+					int l;
+
+					php_gcvt(d, EG(precision), '.', 'e', (char *)num);
+					l = strlen(num);
+					if (options & PHP_JSON_PRESERVE_ZERO_FRACTION && strchr(num, '.') == NULL && l < NUM_BUF_SIZE - 2) {
+						num[l++] = '.';
+						num[l++] = '0';
+						num[l] = '\0';
+					}
+					smart_str_appendl(buf, num, l);
 				} else {
 					JSON_G(error_code) = PHP_JSON_ERROR_INF_OR_NAN;
 					smart_str_appendc(buf, '0');
@@ -622,14 +640,19 @@ PHP_JSON_API void php_json_encode(smart_str *buf, zval *val, int options TSRMLS_
 
 		case IS_DOUBLE:
 			{
-				char *d = NULL;
+				char num[NUM_BUF_SIZE];
 				int len;
 				double dbl = Z_DVAL_P(val);
 
 				if (!zend_isinf(dbl) && !zend_isnan(dbl)) {
-					len = spprintf(&d, 0, "%.*k", (int) EG(precision), dbl);
-					smart_str_appendl(buf, d, len);
-					efree(d);
+					php_gcvt(dbl, EG(precision), '.', 'e', (char *)num);
+					len = strlen(num);
+					if (options & PHP_JSON_PRESERVE_ZERO_FRACTION && strchr(num, '.') == NULL && len < NUM_BUF_SIZE - 2) {
+						num[len++] = '.';
+						num[len++] = '0';
+						num[len] = '\0';
+					}
+					smart_str_appendl(buf, num, len);
 				} else {
 					JSON_G(error_code) = PHP_JSON_ERROR_INF_OR_NAN;
 					smart_str_appendc(buf, '0');
@@ -712,14 +735,14 @@ PHP_JSON_API void php_json_decode_ex(zval *return_value, char *str, int str_len,
 
 		RETVAL_NULL();
 		if (trim_len == 4) {
-			if (!strncasecmp(trim, "null", trim_len)) {
+			if (!strncmp(trim, "null", trim_len)) {
 				/* We need to explicitly clear the error because its an actual NULL and not an error */
 				jp->error_code = PHP_JSON_ERROR_NONE;
 				RETVAL_NULL();
-			} else if (!strncasecmp(trim, "true", trim_len)) {
+			} else if (!strncmp(trim, "true", trim_len)) {
 				RETVAL_BOOL(1);
 			}
-		} else if (trim_len == 5 && !strncasecmp(trim, "false", trim_len)) {
+		} else if (trim_len == 5 && !strncmp(trim, "false", trim_len)) {
 			RETVAL_BOOL(0);
 		}
 

@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2014 The PHP Group                                |
+   | Copyright (c) 1997-2015 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -1588,7 +1588,7 @@ PHP_FUNCTION(snmpwalk)
 /* }}} */
 
 /* {{{ proto mixed snmprealwalk(string host, string community, mixed object_id [, int timeout [, int retries]])
-   Return all objects including their respective object id withing the specified one */
+   Return all objects including their respective object id within the specified one */
 PHP_FUNCTION(snmprealwalk)
 {
 	php_snmp(INTERNAL_FUNCTION_PARAM_PASSTHRU, SNMP_CMD_WALK, SNMP_VERSION_1);
@@ -1616,7 +1616,7 @@ PHP_FUNCTION(snmp_get_quick_print)
 /* }}} */
 
 /* {{{ proto bool snmp_set_quick_print(int quick_print)
-   Return all objects including their respective object id withing the specified one */
+   Return all objects including their respective object id within the specified one */
 PHP_FUNCTION(snmp_set_quick_print)
 {
 	long a1;
@@ -1698,7 +1698,7 @@ PHP_FUNCTION(snmp2_walk)
 /* }}} */
 
 /* {{{ proto mixed snmp2_real_walk(string host, string community, mixed object_id [, int timeout [, int retries]])
-   Return all objects including their respective object id withing the specified one */
+   Return all objects including their respective object id within the specified one */
 PHP_FUNCTION(snmp2_real_walk)
 {
 	php_snmp(INTERNAL_FUNCTION_PARAM_PASSTHRU, SNMP_CMD_WALK, SNMP_VERSION_2c);
@@ -1893,7 +1893,7 @@ PHP_METHOD(snmp, getnext)
 /* }}} */
 
 /* {{{ proto mixed SNMP::walk(mixed object_id [, bool $suffix_as_key = FALSE [, int $max_repetitions [, int $non_repeaters]])
-   Return all objects including their respective object id withing the specified one as array of oid->value pairs */
+   Return all objects including their respective object id within the specified one as array of oid->value pairs */
 PHP_METHOD(snmp, walk)
 {
 	php_snmp(INTERNAL_FUNCTION_PARAM_PASSTHRU, SNMP_CMD_WALK, (-1));

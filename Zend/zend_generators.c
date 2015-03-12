@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1998-2014 Zend Technologies Ltd. (http://www.zend.com) |
+   | Copyright (c) 1998-2015 Zend Technologies Ltd. (http://www.zend.com) |
    +----------------------------------------------------------------------+
    | This source file is subject to version 2.00 of the Zend license,     |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -113,7 +113,7 @@ ZEND_API void zend_generator_close(zend_generator *generator, zend_bool finished
 		zend_op_array *op_array = execute_data->op_array;
 
 		if (!execute_data->symbol_table) {
-			zend_free_compiled_variables(execute_data);
+			zend_free_compiled_variables(execute_data TSRMLS_CC);
 		} else {
 			zend_clean_and_cache_symbol_table(execute_data->symbol_table TSRMLS_CC);
 		}
@@ -125,6 +125,7 @@ ZEND_API void zend_generator_close(zend_generator *generator, zend_bool finished
 		/* A fatal error / die occurred during the generator execution. Trying to clean
 		 * up the stack may not be safe in this case. */
 		if (CG(unclean_shutdown)) {
+			generator->execute_data = NULL;
 			return;
 		}
 
@@ -466,7 +467,7 @@ ZEND_METHOD(Generator, current)
 	zend_generator_ensure_initialized(generator TSRMLS_CC);
 
 	if (generator->value) {
-		RETURN_ZVAL(generator->value, 1, 0);
+		RETURN_ZVAL_FAST(generator->value);
 	}
 }
 /* }}} */
@@ -486,7 +487,7 @@ ZEND_METHOD(Generator, key)
 	zend_generator_ensure_initialized(generator TSRMLS_CC);
 
 	if (generator->key) {
-		RETURN_ZVAL(generator->key, 1, 0);
+		RETURN_ZVAL_FAST(generator->key);
 	}
 }
 /* }}} */
@@ -539,7 +540,7 @@ ZEND_METHOD(Generator, send)
 	zend_generator_resume(generator TSRMLS_CC);
 
 	if (generator->value) {
-		RETURN_ZVAL(generator->value, 1, 0);
+		RETURN_ZVAL_FAST(generator->value);
 	}
 }
 /* }}} */
@@ -574,7 +575,7 @@ ZEND_METHOD(Generator, throw)
 		zend_generator_resume(generator TSRMLS_CC);
 
 		if (generator->value) {
-			RETURN_ZVAL(generator->value, 1, 0);
+			RETURN_ZVAL_FAST(generator->value);
 		}
 	} else {
 		/* If the generator is already closed throw the exception in the

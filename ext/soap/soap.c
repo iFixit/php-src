@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2014 The PHP Group                                |
+  | Copyright (c) 1997-2015 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -151,7 +151,9 @@ static void soap_error_handler(int error_num, const char *error_filename, const 
 		if (zend_hash_find(Z_OBJPROP_P(this_ptr),"service", sizeof("service"), (void **)&tmp) != FAILURE) { \
 			ss = (soapServicePtr)zend_fetch_resource(tmp TSRMLS_CC, -1, "service", NULL, 1, le_service); \
 		} else { \
-			ss = NULL; \
+	                php_error_docref(NULL TSRMLS_CC, E_WARNING, "Can not fetch service object"); \
+			SOAP_SERVER_END_CODE(); \
+			return; \
 		} \
 	}
 
@@ -225,6 +227,7 @@ PHP_METHOD(SoapClient, __getFunctions);
 PHP_METHOD(SoapClient, __getTypes);
 PHP_METHOD(SoapClient, __doRequest);
 PHP_METHOD(SoapClient, __setCookie);
+PHP_METHOD(SoapClient, __getCookies);
 PHP_METHOD(SoapClient, __setLocation);
 PHP_METHOD(SoapClient, __setSoapHeaders);
 
@@ -368,6 +371,9 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_soapclient___setcookie, 0, 0, 1)
 	ZEND_ARG_INFO(0, value)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO(arginfo_soapclient___getcookies, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_soapclient___setsoapheaders, 0, 0, 1)
 	ZEND_ARG_INFO(0, soapheaders)
 ZEND_END_ARG_INFO()
@@ -422,6 +428,7 @@ static const zend_function_entry soap_client_functions[] = {
 	PHP_ME(SoapClient, __getTypes, 					arginfo_soapclient___gettypes, 0)
 	PHP_ME(SoapClient, __doRequest, 				arginfo_soapclient___dorequest, 0)
 	PHP_ME(SoapClient, __setCookie, 				arginfo_soapclient___setcookie, 0)
+	PHP_ME(SoapClient, __getCookies, 				arginfo_soapclient___getcookies, 0)
 	PHP_ME(SoapClient, __setLocation, 				arginfo_soapclient___setlocation, 0)
 	PHP_ME(SoapClient, __setSoapHeaders, 			arginfo_soapclient___setsoapheaders, 0)
 	PHP_FE_END
@@ -1560,48 +1567,45 @@ PHP_METHOD(SoapServer, handle)
 	}
 
 	if (ZEND_NUM_ARGS() == 0) {
-		if (SG(request_info).raw_post_data) {
-			char *post_data = SG(request_info).raw_post_data;
-			int post_data_length = SG(request_info).raw_post_data_length;
+		if (SG(request_info).request_body && 0 == php_stream_rewind(SG(request_info).request_body)) {
 			zval **server_vars, **encoding;
+			php_stream_filter *zf = NULL;
 
 			zend_is_auto_global("_SERVER", sizeof("_SERVER")-1 TSRMLS_CC);
 			if (zend_hash_find(&EG(symbol_table), "_SERVER", sizeof("_SERVER"), (void **) &server_vars) == SUCCESS &&
 			    Z_TYPE_PP(server_vars) == IS_ARRAY &&
 			    zend_hash_find(Z_ARRVAL_PP(server_vars), "HTTP_CONTENT_ENCODING", sizeof("HTTP_CONTENT_ENCODING"), (void **) &encoding)==SUCCESS &&
 			    Z_TYPE_PP(encoding) == IS_STRING) {
-				zval func;
-				zval retval;
-				zval param;
-				zval *params[1];
 
-				if ((strcmp(Z_STRVAL_PP(encoding),"gzip") == 0 ||
-				     strcmp(Z_STRVAL_PP(encoding),"x-gzip") == 0) &&
-				    zend_hash_exists(EG(function_table), "gzinflate", sizeof("gzinflate"))) {
-					ZVAL_STRING(&func, "gzinflate", 0);
-					params[0] = &param;
-					ZVAL_STRINGL(params[0], post_data+10, post_data_length-10, 0);
-					INIT_PZVAL(params[0]);
-				} else if (strcmp(Z_STRVAL_PP(encoding),"deflate") == 0 &&
-		           zend_hash_exists(EG(function_table), "gzuncompress", sizeof("gzuncompress"))) {
-					ZVAL_STRING(&func, "gzuncompress", 0);
-					params[0] = &param;
-					ZVAL_STRINGL(params[0], post_data, post_data_length, 0);
-					INIT_PZVAL(params[0]);
+				if (strcmp(Z_STRVAL_PP(encoding),"gzip") == 0
+				||  strcmp(Z_STRVAL_PP(encoding),"x-gzip") == 0
+				||  strcmp(Z_STRVAL_PP(encoding),"deflate") == 0
+				) {
+					zval filter_params;
+
+					INIT_PZVAL(&filter_params);
+					array_init_size(&filter_params, 1);
+					add_assoc_long_ex(&filter_params, ZEND_STRS("window"), 0x2f); /* ANY WBITS */
+
+					zf = php_stream_filter_create("zlib.inflate", &filter_params, 0 TSRMLS_CC);
+					zval_dtor(&filter_params);
+
+					if (zf) {
+						php_stream_filter_append(&SG(request_info).request_body->readfilters, zf);
+					} else {
+						php_error_docref(NULL TSRMLS_CC, E_WARNING,"Can't uncompress compressed request");
+						return;
+					}
 				} else {
 					php_error_docref(NULL TSRMLS_CC, E_WARNING,"Request is compressed with unknown compression '%s'",Z_STRVAL_PP(encoding));
 					return;
 				}
-				if (call_user_function(CG(function_table), (zval**)NULL, &func, &retval, 1, params TSRMLS_CC) == SUCCESS &&
-				    Z_TYPE(retval) == IS_STRING) {
-					doc_request = soap_xmlParseMemory(Z_STRVAL(retval),Z_STRLEN(retval));
-					zval_dtor(&retval);
-				} else {
-					php_error_docref(NULL TSRMLS_CC, E_WARNING,"Can't uncompress compressed request");
-					return;
-				}
-			} else {
-				doc_request = soap_xmlParseMemory(post_data, post_data_length);
+			}
+
+			doc_request = soap_xmlParseFile("php://input" TSRMLS_CC);
+
+			if (zf) {
+				php_stream_filter_remove(zf, 1 TSRMLS_CC);
 			}
 		} else {
 			zval_ptr_dtor(&retval);
@@ -3117,7 +3121,7 @@ PHP_METHOD(SoapClient, __doRequest)
 
 /* {{{ proto void SoapClient::__setCookie(string name [, strung value])
    Sets cookie thet will sent with SOAP request.
-   The call to this function will effect all folowing calls of SOAP methods.
+   The call to this function will effect all following calls of SOAP methods.
    If value is not specified cookie is removed. */
 PHP_METHOD(SoapClient, __setCookie)
 {
@@ -3149,6 +3153,24 @@ PHP_METHOD(SoapClient, __setCookie)
 		array_init(zcookie);
 		add_index_stringl(zcookie, 0, val, val_len, 1);
 		add_assoc_zval_ex(*cookies, name, name_len+1, zcookie);
+	}
+}
+/* }}} */
+
+/* {{{ proto array SoapClient::__getCookies ( void )
+   Returns list of cookies */
+PHP_METHOD(SoapClient, __getCookies)
+{
+	zval **cookies, *tmp;
+
+	if (zend_parse_parameters_none() == FAILURE) {
+		return;
+	}
+
+	array_init(return_value);
+
+	if (zend_hash_find(Z_OBJPROP_P(this_ptr), "_cookies", sizeof("_cookies"), (void **)&cookies) != FAILURE) {
+		zend_hash_copy(Z_ARRVAL_P(return_value), Z_ARRVAL_P(*cookies), (copy_ctor_func_t) zval_add_ref, (void *)&tmp, sizeof(zval*));
 	}
 }
 /* }}} */
@@ -4723,6 +4745,7 @@ static void type_to_string(sdlTypePtr type, smart_str *buf, int level)
 				    zend_hash_find(type->attributes, SOAP_1_1_ENC_NAMESPACE":arrayType",
 				      sizeof(SOAP_1_1_ENC_NAMESPACE":arrayType"),
 				      (void **)&attr) == SUCCESS &&
+				      (*attr)->extraAttributes &&
 				      zend_hash_find((*attr)->extraAttributes, WSDL_NAMESPACE":arrayType", sizeof(WSDL_NAMESPACE":arrayType"), (void **)&ext) == SUCCESS) {
 					char *end = strchr((*ext)->val, '[');
 					int len;
@@ -4747,6 +4770,7 @@ static void type_to_string(sdlTypePtr type, smart_str *buf, int level)
 					    zend_hash_find(type->attributes, SOAP_1_2_ENC_NAMESPACE":itemType",
 					      sizeof(SOAP_1_2_ENC_NAMESPACE":itemType"),
 					      (void **)&attr) == SUCCESS &&
+					      (*attr)->extraAttributes &&
 					      zend_hash_find((*attr)->extraAttributes, WSDL_NAMESPACE":itemType", sizeof(WSDL_NAMESPACE":arrayType"), (void **)&ext) == SUCCESS) {
 						smart_str_appends(buf, (*ext)->val);
 						smart_str_appendc(buf, ' ');
@@ -4766,6 +4790,7 @@ static void type_to_string(sdlTypePtr type, smart_str *buf, int level)
 					    zend_hash_find(type->attributes, SOAP_1_2_ENC_NAMESPACE":arraySize",
 					      sizeof(SOAP_1_2_ENC_NAMESPACE":arraySize"),
 					      (void **)&attr) == SUCCESS &&
+					      (*attr)->extraAttributes &&
 					      zend_hash_find((*attr)->extraAttributes, WSDL_NAMESPACE":itemType", sizeof(WSDL_NAMESPACE":arraySize"), (void **)&ext) == SUCCESS) {
 						smart_str_appendc(buf, '[');
 						smart_str_appends(buf, (*ext)->val);
