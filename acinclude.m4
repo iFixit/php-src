@@ -2101,10 +2101,6 @@ dnl PHP_PROG_BISON
 dnl
 dnl Search for bison and check it's version
 dnl
-AC_DEFUN([PHP_PROG_BISON], [
-  AC_PROG_YACC
-  PHP_SUBST(YACC)
-])
 
 dnl
 dnl PHP_PROG_LEX
