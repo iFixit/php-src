@@ -2103,7 +2103,6 @@ dnl Search for bison and check it's version
 dnl
 AC_DEFUN([PHP_PROG_BISON], [
   AC_PROG_YACC
-  LIBZEND_BISON_CHECK
   PHP_SUBST(YACC)
 ])
 
