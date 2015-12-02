@@ -450,7 +450,7 @@ static void sapi_lsapi_log_message(char *message TSRMLS_DC)
 static sapi_module_struct lsapi_sapi_module =
 {
     "litespeed",
-    "LiteSpeed V6.7",
+    "LiteSpeed V6.8",
 
     php_lsapi_startup,              /* startup */
     php_module_shutdown_wrapper,    /* shutdown */
@@ -489,7 +489,7 @@ static sapi_module_struct lsapi_sapi_module =
 };
 /* }}} */
 
-static int init_request_info( TSRMLS_D )
+static void init_request_info( TSRMLS_D )
 {
     char * pContentType = LSAPI_GetHeader( H_CONTENT_TYPE );
     char * pAuth;

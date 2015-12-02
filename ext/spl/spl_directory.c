@@ -202,18 +202,21 @@ static inline void spl_filesystem_object_get_file_name(spl_filesystem_object *in
 {
 	char slash = SPL_HAS_FLAG(intern->flags, SPL_FILE_DIR_UNIXPATHS) ? '/' : DEFAULT_SLASH;
 
-	if (!intern->file_name) {
-		switch (intern->type) {
+	switch (intern->type) {
 		case SPL_FS_INFO:
 		case SPL_FS_FILE:
-			php_error_docref(NULL TSRMLS_CC, E_ERROR, "Object not initialized");
+			if (!intern->file_name) {
+				php_error_docref(NULL TSRMLS_CC, E_ERROR, "Object not initialized");
+			}
 			break;
 		case SPL_FS_DIR:
+			if (intern->file_name) {
+				efree(intern->file_name);
+			}
 			intern->file_name_len = spprintf(&intern->file_name, 0, "%s%c%s",
 			                                 spl_filesystem_object_get_path(intern, NULL TSRMLS_CC),
 			                                 slash, intern->u.dir.entry.d_name);
 			break;
-		}
 	}
 } /* }}} */
 
@@ -842,7 +845,8 @@ SPL_METHOD(DirectoryIterator, seek)
 			retval = NULL;
 		}
 		if (!valid) {
-			break;
+			zend_throw_exception_ex(spl_ce_OutOfBoundsException, 0 TSRMLS_CC, "Seek position %ld is out of range", pos);
+			return;
 		}
 		zend_call_method_with_0_params(&this_ptr, Z_OBJCE_P(getThis()), &intern->u.dir.func_next, "next", &retval);
 		if (retval) {
@@ -2065,7 +2069,7 @@ static int spl_filesystem_file_read(spl_filesystem_object *intern, int silent TS
 
 	if (intern->u.file.max_line_len > 0) {
 		buf = safe_emalloc((intern->u.file.max_line_len + 1), sizeof(char), 0);
-		if (php_stream_get_line(intern->u.file.stream, buf, intern->u.file.max_line_len, &line_len) == NULL) {
+		if (php_stream_get_line(intern->u.file.stream, buf, intern->u.file.max_line_len + 1, &line_len) == NULL) {
 			efree(buf);
 			buf = NULL;
 		} else {

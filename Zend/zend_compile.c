@@ -3482,10 +3482,7 @@ static char * zend_get_function_declaration(zend_function *fptr TSRMLS_DC) /* {{
 					if (precv && precv->opcode == ZEND_RECV_INIT && precv->op2_type != IS_UNUSED) {
 						zval *zv, zv_copy;
 						int use_copy;
-						ALLOC_ZVAL(zv);
-						*zv = *precv->op2.zv;
-						zval_copy_ctor(zv);
-						INIT_PZVAL(zv);
+						zv = precv->op2.zv;
 						if ((Z_TYPE_P(zv) & IS_CONSTANT_TYPE_MASK) == IS_CONSTANT) {
 							REALLOC_BUF_IF_EXCEED(buf, offset, length, Z_STRLEN_P(zv));
 							memcpy(offset, Z_STRVAL_P(zv), Z_STRLEN_P(zv));
@@ -3527,7 +3524,6 @@ static char * zend_get_function_declaration(zend_function *fptr TSRMLS_DC) /* {{
 								zval_dtor(&zv_copy);
 							}
 						}
-						zval_ptr_dtor(&zv);
 					}
 				} else {
 					memcpy(offset, "NULL", 4);
@@ -4061,7 +4057,8 @@ static void zend_add_trait_method(zend_class_entry *ce, const char *name, const 
 			}
 			zend_hash_quick_update(*overriden, arKey, nKeyLength, h, fn, sizeof(zend_function), (void**)&fn);
 			return;
-		} else if (existing_fn->common.fn_flags & ZEND_ACC_ABSTRACT) {
+		} else if (existing_fn->common.fn_flags & ZEND_ACC_ABSTRACT &&
+				(existing_fn->common.scope->ce_flags & ZEND_ACC_INTERFACE) == 0) {
 			/* Make sure the trait method is compatible with previosly declared abstract method */
 			if (!zend_traits_method_compatibility_check(fn, existing_fn TSRMLS_CC)) {
 				zend_error_noreturn(E_COMPILE_ERROR, "Declaration of %s must be compatible with %s",
@@ -4091,6 +4088,7 @@ static void zend_add_trait_method(zend_class_entry *ce, const char *name, const 
 			/* inherited members are overridden by members inserted by traits */
 			/* check whether the trait method fulfills the inheritance requirements */
 			do_inheritance_check_on_method(fn, existing_fn TSRMLS_CC);
+			fn->common.prototype = NULL;
 		}
 	}
 
@@ -4109,7 +4107,7 @@ static int zend_fixup_trait_method(zend_function *fn, zend_class_entry *ce TSRML
 		if (fn->common.fn_flags & ZEND_ACC_ABSTRACT) {
 			ce->ce_flags |= ZEND_ACC_IMPLICIT_ABSTRACT_CLASS;
 		}
-		if (fn->op_array.static_variables) {
+		if (fn->type == ZEND_USER_FUNCTION && fn->op_array.static_variables) {
 			ce->ce_flags |= ZEND_HAS_STATIC_IN_METHODS;
 		}
 	}
@@ -4221,6 +4219,7 @@ static void zend_check_trait_usage(zend_class_entry *ce, zend_class_entry *trait
 static void zend_traits_init_trait_structures(zend_class_entry *ce TSRMLS_DC) /* {{{ */
 {
 	size_t i, j = 0;
+	zend_trait_precedence **precedences;
 	zend_trait_precedence *cur_precedence;
 	zend_trait_method_reference *cur_method_ref;
 	char *lcname;
@@ -4229,7 +4228,9 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce TSRMLS_DC) /*
 	/* resolve class references */
 	if (ce->trait_precedences) {
 		i = 0;
-		while ((cur_precedence = ce->trait_precedences[i])) {
+		precedences = ce->trait_precedences;
+		ce->trait_precedences = NULL;
+		while ((cur_precedence = precedences[i])) {
 			/** Resolve classes for all precedence operations. */
 			if (cur_precedence->exclude_from_classes) {
 				cur_method_ref = cur_precedence->trait_method;
@@ -4286,6 +4287,7 @@ static void zend_traits_init_trait_structures(zend_class_entry *ce TSRMLS_DC) /*
 			}
 			i++;
 		}
+		ce->trait_precedences = precedences;
 	}
 
 	if (ce->trait_aliases) {
@@ -4353,22 +4355,37 @@ static void zend_do_traits_method_binding(zend_class_entry *ce TSRMLS_DC) /* {{{
 	for (i = 0; i < ce->num_traits; i++) {
 		if (ce->trait_precedences) {
 			HashTable exclude_table;
+			zend_trait_precedence **precedences;
 
 			/* TODO: revisit this start size, may be its not optimal */
 			zend_hash_init_ex(&exclude_table, 2, NULL, NULL, 0, 0);
 
-			zend_traits_compile_exclude_table(&exclude_table, ce->trait_precedences, ce->traits[i]);
+			precedences = ce->trait_precedences;
+			ce->trait_precedences = NULL;
+			zend_traits_compile_exclude_table(&exclude_table, precedences, ce->traits[i]);
 
 			/* copies functions, applies defined aliasing, and excludes unused trait methods */
 			zend_hash_apply_with_arguments(&ce->traits[i]->function_table TSRMLS_CC, (apply_func_args_t)zend_traits_copy_functions, 3, ce, &overriden, &exclude_table);
 
 			zend_hash_destroy(&exclude_table);
+			ce->trait_precedences = precedences;
 		} else {
 			zend_hash_apply_with_arguments(&ce->traits[i]->function_table TSRMLS_CC, (apply_func_args_t)zend_traits_copy_functions, 3, ce, &overriden, NULL);
 		}
 	}
 
     zend_hash_apply_with_argument(&ce->function_table, (apply_func_arg_t)zend_fixup_trait_method, ce TSRMLS_CC);
+
+	if (ce->trait_precedences) {
+		i = 0;
+		while (ce->trait_precedences[i]) {
+			if (ce->trait_precedences[i]->exclude_from_classes) {
+				efree(ce->trait_precedences[i]->exclude_from_classes);
+				ce->trait_precedences[i]->exclude_from_classes = NULL;
+			}
+			i++;
+		}
+	}
 
 	if (overriden) {
 		zend_hash_destroy(overriden);
@@ -5797,7 +5814,7 @@ void zend_do_fetch_constant(znode *result, znode *constant_container, znode *con
 				opline->op2.constant = zend_add_const_name_literal(CG(active_op_array), &constant_name->u.constant, 0 TSRMLS_CC);
 			} else {
 				opline->extended_value = IS_CONSTANT_UNQUALIFIED;
-				if (CG(current_namespace)) {
+				if (check_namespace && CG(current_namespace)) {
 					opline->extended_value |= IS_CONSTANT_IN_NAMESPACE;
 					opline->op2.constant = zend_add_const_name_literal(CG(active_op_array), &constant_name->u.constant, 1 TSRMLS_CC);
 				} else {
@@ -6816,7 +6833,14 @@ void zend_do_extended_fcall_end(TSRMLS_D) /* {{{ */
 
 void zend_do_ticks(TSRMLS_D) /* {{{ */
 {
-	zend_op *opline = get_next_op(CG(active_op_array) TSRMLS_CC);
+	zend_op *opline;
+
+	/* This prevents a double TICK generated by the parser statement of "declare()" */
+	if (CG(active_op_array)->last && CG(active_op_array)->opcodes[CG(active_op_array)->last - 1].opcode == ZEND_TICKS) {
+		return;
+	}
+
+	opline = get_next_op(CG(active_op_array) TSRMLS_CC);
 
 	opline->opcode = ZEND_TICKS;
 	SET_UNUSED(opline->op1);
@@ -7132,7 +7156,7 @@ void zend_do_begin_namespace(const znode *name, zend_bool with_bracket TSRMLS_DC
 }
 /* }}} */
 
-void zend_do_use(znode *ns_name, znode *new_name, int is_global TSRMLS_DC) /* {{{ */
+void zend_do_use(znode *ns_name, znode *new_name TSRMLS_DC) /* {{{ */
 {
 	char *lcname;
 	zval *name, *ns, tmp;
@@ -7159,7 +7183,7 @@ void zend_do_use(znode *ns_name, znode *new_name, int is_global TSRMLS_DC) /* {{
 			ZVAL_STRING(name, p+1, 1);
 		} else {
 			ZVAL_ZVAL(name, ns, 1, 0);
-			warn = !is_global && !CG(current_namespace);
+			warn = !CG(current_namespace);
 		}
 	}
 
@@ -7215,7 +7239,7 @@ void zend_do_use(znode *ns_name, znode *new_name, int is_global TSRMLS_DC) /* {{
 }
 /* }}} */
 
-void zend_do_use_non_class(znode *ns_name, znode *new_name, int is_global, int is_function, zend_bool case_sensitive, HashTable *current_import_sub, HashTable *lookup_table TSRMLS_DC) /* {{{ */
+void zend_do_use_non_class(znode *ns_name, znode *new_name, int is_function, zend_bool case_sensitive, HashTable *current_import_sub, HashTable *lookup_table TSRMLS_DC) /* {{{ */
 {
 	char *lookup_name;
 	zval *name, *ns, tmp;
@@ -7236,7 +7260,7 @@ void zend_do_use_non_class(znode *ns_name, znode *new_name, int is_global, int i
 			ZVAL_STRING(name, p+1, 1);
 		} else {
 			ZVAL_ZVAL(name, ns, 1, 0);
-			warn = !is_global && !CG(current_namespace);
+			warn = !CG(current_namespace);
 		}
 	}
 
@@ -7300,25 +7324,25 @@ void zend_do_use_non_class(znode *ns_name, znode *new_name, int is_global, int i
 }
 /* }}} */
 
-void zend_do_use_function(znode *ns_name, znode *new_name, int is_global TSRMLS_DC) /* {{{ */
+void zend_do_use_function(znode *ns_name, znode *new_name TSRMLS_DC) /* {{{ */
 {
 	if (!CG(current_import_function)) {
 		CG(current_import_function) = emalloc(sizeof(HashTable));
 		zend_hash_init(CG(current_import_function), 0, NULL, ZVAL_PTR_DTOR, 0);
 	}
 
-	zend_do_use_non_class(ns_name, new_name, is_global, 1, 0, CG(current_import_function), CG(function_table) TSRMLS_CC);
+	zend_do_use_non_class(ns_name, new_name, 1, 0, CG(current_import_function), CG(function_table) TSRMLS_CC);
 }
 /* }}} */
 
-void zend_do_use_const(znode *ns_name, znode *new_name, int is_global TSRMLS_DC) /* {{{ */
+void zend_do_use_const(znode *ns_name, znode *new_name TSRMLS_DC) /* {{{ */
 {
 	if (!CG(current_import_const)) {
 		CG(current_import_const) = emalloc(sizeof(HashTable));
 		zend_hash_init(CG(current_import_const), 0, NULL, ZVAL_PTR_DTOR, 0);
 	}
 
-	zend_do_use_non_class(ns_name, new_name, is_global, 0, 1, CG(current_import_const), &CG(const_filenames) TSRMLS_CC);
+	zend_do_use_non_class(ns_name, new_name, 0, 1, CG(current_import_const), &CG(const_filenames) TSRMLS_CC);
 }
 /* }}} */
 

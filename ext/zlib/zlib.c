@@ -82,8 +82,8 @@ static int php_zlib_output_encoding(TSRMLS_D)
 	zval **enc;
 
 	if (!ZLIBG(compression_coding)) {
-		zend_is_auto_global(ZEND_STRL("_SERVER") TSRMLS_CC);
-		if (PG(http_globals)[TRACK_VARS_SERVER] && SUCCESS == zend_hash_find(Z_ARRVAL_P(PG(http_globals)[TRACK_VARS_SERVER]), "HTTP_ACCEPT_ENCODING", sizeof("HTTP_ACCEPT_ENCODING"), (void *) &enc)) {
+		if ((PG(http_globals)[TRACK_VARS_SERVER]  || zend_is_auto_global(ZEND_STRL("_SERVER") TSRMLS_CC)) && 
+				SUCCESS == zend_hash_find(Z_ARRVAL_P(PG(http_globals)[TRACK_VARS_SERVER]), "HTTP_ACCEPT_ENCODING", sizeof("HTTP_ACCEPT_ENCODING"), (void *) &enc)) {
 			convert_to_string(*enc);
 			if (strstr(Z_STRVAL_PP(enc), "gzip")) {
 				ZLIBG(compression_coding) = PHP_ZLIB_ENCODING_GZIP;
@@ -593,7 +593,7 @@ static PHP_FUNCTION(gzopen)
 	php_stream *stream;
 	long use_include_path = 0;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss|l", &filename, &filename_len, &mode, &mode_len, &use_include_path) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ps|l", &filename, &filename_len, &mode, &mode_len, &use_include_path) == FAILURE) {
 		return;
 	}
 
@@ -621,7 +621,7 @@ static PHP_FUNCTION(readgzfile)
 	int size;
 	long use_include_path = 0;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|l", &filename, &filename_len, &use_include_path) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "p|l", &filename, &filename_len, &use_include_path) == FAILURE) {
 		return;
 	}
 

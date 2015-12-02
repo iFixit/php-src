@@ -314,9 +314,11 @@ if (ZEND_OPTIMIZER_PASS_1 & OPTIMIZATION_LEVEL) {
 							    ZEND_IS_CONSTANT_TYPE(Z_TYPE(t))) {
 								break;
 							}
-						} else {
+						} else if (Z_TYPE_PP(c) <= IS_BOOL || Z_TYPE_PP(c) == IS_STRING) {
 							t = **c;
 							zval_copy_ctor(&t);
+						} else {
+							break;
 						}
 
 						if (ZEND_OP1_TYPE(opline) == IS_CONST) {
@@ -376,11 +378,20 @@ if (ZEND_OPTIMIZER_PASS_1 & OPTIMIZATION_LEVEL) {
 							Z_STRVAL(ZEND_OP1_LITERAL(opline - 1)), Z_STRLEN(ZEND_OP1_LITERAL(opline - 1)));
 					
 					if (zend_hash_find(EG(function_table), lc_name, Z_STRLEN(ZEND_OP1_LITERAL(opline - 1)) + 1,
-								(void *)&func) == SUCCESS &&
-							func->type == ZEND_INTERNAL_FUNCTION &&
-							func->module->type == MODULE_PERSISTENT) {
+								(void *)&func) == SUCCESS
+						 && func->type == ZEND_INTERNAL_FUNCTION
+						 && func->module->type == MODULE_PERSISTENT
+#ifdef ZEND_WIN32
+						 && func->module->handle == NULL
+#endif
+						) {
 						zval t;
-						ZVAL_BOOL(&t, 1);
+						if (Z_STRLEN(ZEND_OP1_LITERAL(opline)) == sizeof("is_callable") - 1 ||
+							   func->handler != ZEND_FN(display_disabled_function))	{
+							ZVAL_BOOL(&t, 1);
+						} else {
+							ZVAL_BOOL(&t, 0);
+						}
 						if (replace_var_by_const(op_array, opline + 1, ZEND_RESULT(opline).var, &t TSRMLS_CC)) {
 							literal_dtor(&ZEND_OP1_LITERAL(opline - 1));
 							MAKE_NOP((opline - 1));
@@ -407,7 +418,11 @@ if (ZEND_OPTIMIZER_PASS_1 & OPTIMIZATION_LEVEL) {
 							ZVAL_BOOL(&t, 0);
 						}
 					} else {
-						if (m->type == MODULE_PERSISTENT) {
+						if (m->type == MODULE_PERSISTENT
+#ifdef ZEND_WIN32
+						 && m->handle == NULL
+#endif
+						) {
 							ZVAL_BOOL(&t, 1);
 						} else {
 							break;

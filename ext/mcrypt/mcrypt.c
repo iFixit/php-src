@@ -288,6 +288,8 @@ const zend_function_entry mcrypt_functions[] = { /* {{{ */
 static PHP_MINFO_FUNCTION(mcrypt);
 static PHP_MINIT_FUNCTION(mcrypt);
 static PHP_MSHUTDOWN_FUNCTION(mcrypt);
+static PHP_GINIT_FUNCTION(mcrypt);
+static PHP_GSHUTDOWN_FUNCTION(mcrypt);
 
 ZEND_DECLARE_MODULE_GLOBALS(mcrypt)
 
@@ -300,8 +302,8 @@ zend_module_entry mcrypt_module_entry = {
 	PHP_MINFO(mcrypt),
 	NO_VERSION_YET,
 	PHP_MODULE_GLOBALS(mcrypt),
-	NULL,
-	NULL,
+	PHP_GINIT(mcrypt),
+	PHP_GSHUTDOWN(mcrypt),
 	NULL,
 	STANDARD_MODULE_PROPERTIES_EX
 };
@@ -380,7 +382,26 @@ static void php_mcrypt_module_dtor(zend_rsrc_list_entry *rsrc TSRMLS_DC) /* {{{ 
 	}
 }
 /* }}} */
-    
+
+static PHP_GINIT_FUNCTION(mcrypt)
+{
+	mcrypt_globals->fd[RANDOM] = -1;
+	mcrypt_globals->fd[URANDOM] = -1;
+}
+
+static PHP_GSHUTDOWN_FUNCTION(mcrypt)
+{
+	if (mcrypt_globals->fd[RANDOM] > 0) {
+		close(mcrypt_globals->fd[RANDOM]);
+		mcrypt_globals->fd[RANDOM] = -1;
+	}
+
+	if (mcrypt_globals->fd[URANDOM] > 0) {
+		close(mcrypt_globals->fd[URANDOM]);
+		mcrypt_globals->fd[URANDOM] = -1;
+	}
+}
+
 static PHP_MINIT_FUNCTION(mcrypt) /* {{{ */
 {
 	le_mcrypt = zend_register_list_destructors_ex(php_mcrypt_module_dtor, NULL, "mcrypt", module_number);
@@ -1216,6 +1237,10 @@ static int php_mcrypt_ensure_valid_iv(MCRYPT td, const char *iv, int iv_size TSR
 {
 	if (mcrypt_enc_mode_has_iv(td) == 1) {
 		int expected_iv_size = mcrypt_enc_get_iv_size(td);
+		if (expected_iv_size == 0) {
+			/* Algorithm does not use IV, even though mode supports it */
+			return SUCCESS;
+		}
 
 		if (!iv) {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING,
@@ -1423,24 +1448,27 @@ PHP_FUNCTION(mcrypt_create_iv)
 		}
 		n = size;
 #else
-		int    fd;
+		int    *fd = &MCG(fd[source]);
 		size_t read_bytes = 0;
 
-		fd = open(source == RANDOM ? "/dev/random" : "/dev/urandom", O_RDONLY);
-		if (fd < 0) {
-			efree(iv);
-			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Cannot open source device");
-			RETURN_FALSE;
+		if (*fd < 0) {
+			*fd = open(source == RANDOM ? "/dev/random" : "/dev/urandom", O_RDONLY);
+			if (*fd < 0) {
+				efree(iv);
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Cannot open source device");
+				RETURN_FALSE;
+			}
 		}
+
 		while (read_bytes < size) {
-			n = read(fd, iv + read_bytes, size - read_bytes);
+			n = read(*fd, iv + read_bytes, size - read_bytes);
 			if (n < 0) {
 				break;
 			}
 			read_bytes += n;
 		}
 		n = read_bytes;
-		close(fd);
+
 		if (n < size) {
 			efree(iv);
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Could not gather sufficient random data");

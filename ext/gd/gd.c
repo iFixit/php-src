@@ -1405,6 +1405,11 @@ PHP_FUNCTION(gd_info)
 	add_assoc_bool(return_value, "XPM Support", 0);
 #endif
 	add_assoc_bool(return_value, "XBM Support", 1);
+#ifdef HAVE_GD_WEBP
+	add_assoc_bool(return_value, "WebP Support", 1);
+#else
+	add_assoc_bool(return_value, "WebP Support", 0);
+#endif
 #if defined(USE_GD_JISX0208)
 	add_assoc_bool(return_value, "JIS-mapped Japanese Font Support", 1);
 #else
@@ -1432,7 +1437,7 @@ PHP_FUNCTION(imageloadfont)
 	gdFontPtr font;
 	php_stream *stream;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &file, &file_name) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "p", &file, &file_name) == FAILURE) {
 		return;
 	}
 
@@ -1750,7 +1755,7 @@ PHP_FUNCTION(imagefilledarc)
 	long cx, cy, w, h, ST, E, col, style;
 	gdImagePtr im;
 	int e, st;
-	
+
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rllllllll", &IM, &cx, &cy, &w, &h, &ST, &E, &col, &style) == FAILURE) {
 		return;
 	}
@@ -1991,7 +1996,7 @@ PHP_FUNCTION(imagegrabwindow)
 	if ( handle == 0 ) {
 		goto clean;
 	}
-	pPrintWindow = (tPrintWindow) GetProcAddress(handle, "PrintWindow");  
+	pPrintWindow = (tPrintWindow) GetProcAddress(handle, "PrintWindow");
 
 	if ( pPrintWindow )  {
 		pPrintWindow(window, memDC, (UINT) client_area);
@@ -2369,7 +2374,7 @@ static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type,
 	long ignore_warning;
 
 	if (image_type == PHP_GDIMG_TYPE_GD2PART) {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sllll", &file, &file_len, &srcx, &srcy, &width, &height) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "pllll", &file, &file_len, &srcx, &srcy, &width, &height) == FAILURE) {
 			return;
 		}
 		if (width < 1 || height < 1) {
@@ -2377,7 +2382,7 @@ static void _php_image_create_from(INTERNAL_FUNCTION_PARAMETERS, int image_type,
 			RETURN_FALSE;
 		}
 	} else {
-		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &file, &file_len) == FAILURE) {
+		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "p", &file, &file_len) == FAILURE) {
 			return;
 		}
 	}
@@ -3060,10 +3065,11 @@ PHP_FUNCTION(imagegammacorrect)
 			for (x = 0; x < gdImageSX(im); x++)	{
 				c = gdImageGetPixel(im, x, y);
 				gdImageSetPixel(im, x, y,
-					gdTrueColor(
+					gdTrueColorAlpha(
 						(int) ((pow((pow((gdTrueColorGetRed(c)   / 255.0), input)), 1.0 / output) * 255) + .5),
 						(int) ((pow((pow((gdTrueColorGetGreen(c) / 255.0), input)), 1.0 / output) * 255) + .5),
-						(int) ((pow((pow((gdTrueColorGetBlue(c)  / 255.0), input)), 1.0 / output) * 255) + .5)
+						(int) ((pow((pow((gdTrueColorGetBlue(c)  / 255.0), input)), 1.0 / output) * 255) + .5),
+						gdTrueColorGetAlpha(c)
 					)
 				);
 			}
@@ -3860,7 +3866,7 @@ static void php_imagettftext_common(INTERNAL_FUNCTION_PARAMETERS, int mode, int 
 			if (zend_hash_get_current_data_ex(HASH_OF(EXT), (void **) &item, &pos) == FAILURE) {
 				continue;
 			}
-		
+
 			if (strcmp("linespacing", key) == 0) {
 				convert_to_double_ex(item);
 				strex.flags |= gdFTEX_LINESPACE;
@@ -3939,7 +3945,7 @@ PHP_FUNCTION(imagepsloadfont)
 	struct stat st;
 #endif
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &file, &file_len) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "p", &file, &file_len) == FAILURE) {
 		return;
 	}
 
@@ -4046,7 +4052,7 @@ PHP_FUNCTION(imagepsencodefont)
 	char *enc, **enc_vector;
 	int enc_len, *f_ind;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rs", &fnt, &enc, &enc_len) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "rp", &fnt, &enc, &enc_len) == FAILURE) {
 		return;
 	}
 
@@ -4279,11 +4285,11 @@ PHP_FUNCTION(imagepsbbox)
 	if (argc != 3 && argc != 6) {
 		ZEND_WRONG_PARAM_COUNT();
 	}
-	
+
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "srl|lld", &str, &str_len, &fnt, &sz, &sp, &wd, &angle) == FAILURE) {
 		return;
 	}
-	
+
 	if (argc == 6) {
 		space = sp;
 		add_width = wd;

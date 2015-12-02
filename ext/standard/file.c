@@ -364,11 +364,7 @@ PHP_FUNCTION(flock)
 	/* flock_values contains all possible actions if (operation & 4) we won't block on the lock */
 	act = flock_values[act - 1] | (operation & PHP_LOCK_NB ? LOCK_NB : 0);
 	if (php_stream_lock(stream, act)) {
-#ifdef PHP_WIN32
-		if (operation && errno == ERROR_INVALID_BLOCK && wouldblock && PZVAL_IS_REF(wouldblock)) {
-#else
 		if (operation && errno == EWOULDBLOCK && wouldblock && PZVAL_IS_REF(wouldblock)) {
-#endif
 			Z_LVAL_P(wouldblock) = 1;
 		}
 		RETURN_FALSE;
@@ -826,7 +822,7 @@ PHP_FUNCTION(tempnam)
 	char *p;
 	int fd;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ps", &dir, &dir_len, &prefix, &prefix_len) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "pp", &dir, &dir_len, &prefix, &prefix_len) == FAILURE) {
 		return;
 	}
 
@@ -1351,7 +1347,7 @@ PHP_FUNCTION(rmdir)
 	zval *zcontext = NULL;
 	php_stream_context *context;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|r", &dir, &dir_len, &zcontext) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "p|r", &dir, &dir_len, &zcontext) == FAILURE) {
 		RETURN_FALSE;
 	}
 

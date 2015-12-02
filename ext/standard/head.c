@@ -110,7 +110,7 @@ PHPAPI int php_setcookie(char *name, int name_len, char *value, int value_len, t
 
 	cookie = emalloc(len + 100);
 
-	if (value && value_len == 0) {
+	if (value == NULL || value_len == 0) {
 		/*
 		 * MSIE doesn't delete a cookie when you set it to a null value
 		 * so in order to force cookies to be deleted, even on MSIE, we
@@ -277,9 +277,6 @@ PHP_FUNCTION(headers_list)
 		return;
 	}
 
-	if (!&SG(sapi_headers).headers) {
-		RETURN_FALSE;
-	}
 	array_init(return_value);
 	zend_llist_apply_with_argument(&SG(sapi_headers).headers, php_head_apply_header_list_to_hash, return_value TSRMLS_CC);
 }

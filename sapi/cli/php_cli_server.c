@@ -98,7 +98,7 @@
 #include "ext/standard/file.h" /* for php_set_sock_blocking() :-( */
 #include "ext/standard/php_smart_str.h"
 #include "ext/standard/html.h"
-#include "ext/standard/url.h" /* for php_url_decode() */
+#include "ext/standard/url.h" /* for php_raw_url_decode() */
 #include "ext/standard/php_string.h" /* for php_dirname() */
 #include "php_network.h"
 
@@ -732,6 +732,9 @@ static int sapi_cli_server_register_entry_cb(char **entry TSRMLS_DC, int num_arg
 			}
 		}
 		spprintf(&real_key, 0, "%s_%s", "HTTP", key);
+		if (strcmp(key, "CONTENT_TYPE") == 0 || strcmp(key, "CONTENT_LENGTH") == 0) {
+			sapi_cli_server_register_variable(track_vars_array, key, *entry TSRMLS_CC);
+		}
 		sapi_cli_server_register_variable(track_vars_array, real_key, *entry TSRMLS_CC);
 		efree(key);
 		efree(real_key);
@@ -1574,7 +1577,19 @@ static void normalize_vpath(char **retval, size_t *retval_len, const char *vpath
 		return;
 	}
 
-	decoded_vpath_end = decoded_vpath + php_url_decode(decoded_vpath, vpath_len);
+	decoded_vpath_end = decoded_vpath + php_raw_url_decode(decoded_vpath, vpath_len);
+
+#ifdef PHP_WIN32
+	{
+		char *p = decoded_vpath;
+		
+		do {
+			if (*p == '\\') {
+				*p = '/';
+			}
+		} while (*p++);
+	}
+#endif
 
 	p = decoded_vpath;
 
@@ -2185,6 +2200,9 @@ static int php_cli_server_dispatch(php_cli_server *server, php_cli_server_client
 	if (!is_static_file) {
 		if (SUCCESS == php_cli_server_dispatch_script(server, client TSRMLS_CC)
 				|| SUCCESS != php_cli_server_send_error_page(server, client, 500 TSRMLS_CC)) {
+			if (SG(sapi_headers).http_response_code == 304) {
+				SG(sapi_headers).send_default_content_type = 0;
+			}
 			php_cli_server_request_shutdown(server, client TSRMLS_CC);
 			return SUCCESS;
 		}

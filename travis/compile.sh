@@ -10,7 +10,9 @@ else
 	DEBUG="";
 fi
 ./buildconf --force
-./configure --quiet \
+./configure \
+--prefix=$HOME"/php-install" \
+--quiet \
 $DEBUG \
 $TS \
 --enable-fpm \
@@ -21,7 +23,7 @@ $TS \
 --with-pdo-pgsql \
 --with-pdo-sqlite \
 --enable-intl \
---without-pear \
+--with-pear \
 --with-gd \
 --with-jpeg-dir=/usr \
 --with-png-dir=/usr \
@@ -57,4 +59,5 @@ $TS \
 --with-enchant=/usr \
 --enable-wddx \
 --enable-sysvmsg 
-make --quiet
+make -j2 --quiet
+make install

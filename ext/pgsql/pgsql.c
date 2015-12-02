@@ -3114,7 +3114,7 @@ PHP_FUNCTION(pg_trace)
 	php_stream *stream;
 	id = PGG(default_link);
 
-	if (zend_parse_parameters(argc TSRMLS_CC, "s|sr", &z_filename, &z_filename_len, &mode, &mode_len, &pgsql_link) == FAILURE) {
+	if (zend_parse_parameters(argc TSRMLS_CC, "p|sr", &z_filename, &z_filename_len, &mode, &mode_len, &pgsql_link) == FAILURE) {
 		return;
 	}
 
@@ -5479,7 +5479,11 @@ PHP_PGSQL_API int php_pgsql_meta_data(PGconn *pg_link, const char *table_name, z
 
 	src = estrdup(table_name);
 	tmp_name = php_strtok_r(src, ".", &tmp_name2);
-	
+	if (!tmp_name) {
+		efree(src);
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, "The table name must be specified");
+		return FAILURE;
+	}
 	if (!tmp_name2 || !*tmp_name2) {
 		/* Default schema */
 		tmp_name2 = tmp_name;
@@ -5722,9 +5726,6 @@ static int php_pgsql_convert_match(const char *str, size_t str_len, const char *
 
 	regerr = regexec(&re, str, re.re_nsub+1, subs, 0);
 	if (regerr == REG_NOMATCH) {
-#ifdef PHP_DEBUG
-		php_error_docref(NULL TSRMLS_CC, E_NOTICE, "'%s' does not match with '%s'", str, regex);
-#endif
 		ret = FAILURE;
 	}
 	else if (regerr) {
@@ -5971,7 +5972,12 @@ PHP_PGSQL_API int php_pgsql_convert(PGconn *pg_link, const char *table_name, con
 						else {
 							/* better regex? */
 							if (php_pgsql_convert_match(Z_STRVAL_PP(val), Z_STRLEN_PP(val), "^[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?$", 0 TSRMLS_CC) == FAILURE) {
-								err = 1;
+								if (php_pgsql_convert_match(Z_STRVAL_PP(val), Z_STRLEN_PP(val), "^[+-]{0,1}(inf)(inity){0,1}$", 1 TSRMLS_CC) == FAILURE) {
+									err = 1;
+								} else {
+									ZVAL_STRING(new_val, Z_STRVAL_PP(val), 1);
+									php_pgsql_add_quotes(new_val, 1 TSRMLS_CC);
+								}
 							}
 							else {
 								ZVAL_STRING(new_val, Z_STRVAL_PP(val), 1);
@@ -6494,12 +6500,16 @@ static int do_exec(smart_str *querystr, int expect, PGconn *pg_link, ulong opt T
 
 static inline void build_tablename(smart_str *querystr, PGconn *pg_link, const char *table)
 {
-	char *table_copy, *escaped, *token, *tmp;
+	char *table_copy, *escaped, *tmp;
+	const char *token;
 	size_t len;
 
 	/* schame.table should be "schame"."table" */
 	table_copy = estrdup(table);
 	token = php_strtok_r(table_copy, ".", &tmp);
+	if (token == NULL) {
+		token = table;
+	}
 	len = strlen(token);
 	if (_php_pgsql_detect_identifier_escape(token, len) == SUCCESS) {
 		smart_str_appendl(querystr, token, len);
