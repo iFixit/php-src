@@ -45,21 +45,19 @@ gdImagePtr gdImageCrop(gdImagePtr src, const gdRectPtr crop)
 	gdImagePtr dst;
 	int y;
 
-	/* check size */
-	if (crop->width<=0 || crop->height<=0) {
-		return NULL;
-	}
-
 	/* allocate the requested size (could be only partially filled) */
 	if (src->trueColor) {
 		dst = gdImageCreateTrueColor(crop->width, crop->height);
+		if (dst == NULL) {
+			return NULL;
+		}
 		gdImageSaveAlpha(dst, 1);
 	} else {
 		dst = gdImageCreate(crop->width, crop->height);
+		if (dst == NULL) {
+			return NULL;
+		}
 		gdImagePaletteCopy(dst, src);
-	}
-	if (dst == NULL) {
-		return NULL;
 	}
 	dst->transparent = src->transparent;
 
@@ -82,14 +80,14 @@ printf("rect->x: %i\nrect->y: %i\nrect->width: %i\nrect->height: %i\n", crop->x,
 	y = crop->y;
 	if (src->trueColor) {
 		unsigned int dst_y = 0;
-		while (y < (crop->y + (crop->height - 1))) {
+		while (y < (crop->y + crop->height)) {
 			/* TODO: replace 4 w/byte per channel||pitch once available */
 			memcpy(dst->tpixels[dst_y++], src->tpixels[y++] + crop->x, crop->width * 4);
 		}
 	} else {
 		int x;
-		for (y = crop->y; y < (crop->y + (crop->height - 1)); y++) {
-			for (x = crop->x; x < (crop->x + (crop->width - 1)); x++) {
+		for (y = crop->y; y < (crop->y + crop->height); y++) {
+			for (x = crop->x; x < (crop->x + crop->width); x++) {
 				dst->pixels[y - crop->y][x - crop->x] = src->pixels[y][x];
 			}
 		}

@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2014 The PHP Group                                |
+   | Copyright (c) 1997-2016 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -124,12 +124,22 @@ static void _php_image_output_ctx(INTERNAL_FUNCTION_PARAMETERS, int image_type, 
 				RETURN_FALSE;
 			}
 		} else if (Z_TYPE_P(to_zval) == IS_STRING) {
+			if (CHECK_ZVAL_NULL_PATH(to_zval)) {
+				php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid 2nd parameter, filename must not contain null bytes");
+				RETURN_FALSE;
+			}
+
 			stream = php_stream_open_wrapper(Z_STRVAL_P(to_zval), "wb", REPORT_ERRORS|IGNORE_PATH|IGNORE_URL_WIN, NULL);
 			if (stream == NULL) {
 				RETURN_FALSE;
 			}
 		} else {
 			php_error_docref(NULL TSRMLS_CC, E_WARNING, "Invalid 2nd parameter, it must a filename or a stream");
+			RETURN_FALSE;
+		}
+	} else if (argc > 1 && file != NULL) {
+		stream = php_stream_open_wrapper(file, "wb", REPORT_ERRORS|IGNORE_PATH|IGNORE_URL_WIN, NULL);
+		if (stream == NULL) {
 			RETURN_FALSE;
 		}
 	} else {
@@ -179,7 +189,7 @@ static void _php_image_output_ctx(INTERNAL_FUNCTION_PARAMETERS, int image_type, 
 				q = i;
 			}
 			if (image_type == PHP_GDIMG_TYPE_XBM) {
-				(*func_p)(im, file, q, ctx);
+				(*func_p)(im, file ? file : "", q, ctx);
 			} else {
 				(*func_p)(im, q, ctx);
 			}
