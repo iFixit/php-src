@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 2006-2015 The PHP Group                                |
+  | Copyright (c) 2006-2016 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -965,6 +965,10 @@ MYSQLND_METHOD(mysqlnd_net, enable_ssl)(MYSQLND_NET * const net TSRMLS_DC)
 		ZVAL_BOOL(&verify_peer_zval, verify);
 		php_stream_context_set_option(context, "ssl", "verify_peer", &verify_peer_zval);
 		php_stream_context_set_option(context, "ssl", "verify_peer_name", &verify_peer_zval);
+		if (net->data->options.ssl_verify_peer == MYSQLND_SSL_PEER_DONT_VERIFY) {
+			ZVAL_TRUE(&verify_peer_zval);
+			php_stream_context_set_option(context, "ssl", "allow_self_signed", &verify_peer_zval);
+		}
 	}
 
 	php_stream_context_set(net_stream, context);

@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | Zend Engine                                                          |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1998-2015 Zend Technologies Ltd. (http://www.zend.com) |
+   | Copyright (c) 1998-2016 Zend Technologies Ltd. (http://www.zend.com) |
    +----------------------------------------------------------------------+
    | This source file is subject to version 2.00 of the Zend license,     |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -2224,10 +2224,16 @@ void zend_do_resolve_class_name(znode *result, znode *class_name, int is_static 
 			if (!CG(active_class_entry)) {
 				zend_error_noreturn(E_COMPILE_ERROR, "Cannot access self::class when no class scope is active");
 			}
-			if (CG(active_class_entry)->ce_flags & ZEND_ACC_TRAIT) {
+			if ((CG(active_class_entry)->ce_flags & ZEND_ACC_TRAIT) == ZEND_ACC_TRAIT) {
+				zval_dtor(&class_name->u.constant);
 				constant_name.op_type = IS_CONST;
-				ZVAL_STRINGL(&constant_name.u.constant, "class", sizeof("class")-1, 1);
-				zend_do_fetch_constant(result, class_name, &constant_name, ZEND_RT, 1 TSRMLS_CC);
+				ZVAL_STRINGL(&constant_name.u.constant, "__CLASS__", sizeof("__CLASS__")-1, 1);
+				if (is_static) {
+					*result = constant_name;
+					result->u.constant.type = IS_CONSTANT;
+				} else {
+					zend_do_fetch_constant(result, NULL, &constant_name, ZEND_RT, 1 TSRMLS_CC);
+				}
 				break;
 			}
 			zval_dtor(&class_name->u.constant);

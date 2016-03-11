@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2015 The PHP Group                                |
+   | Copyright (c) 1997-2016 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -799,6 +799,7 @@ static void php_mysql_do_connect(INTERNAL_FUNCTION_PARAMETERS, int persistent)
 			passwd_len = passwd? strlen(passwd):0;
 		}
 
+#if !defined(MYSQL_USE_MYSQLND)
 		/* disable local infile option for open_basedir */
 #if PHP_API_VERSION < 20100412
 		if (((PG(open_basedir) && PG(open_basedir)[0] != '\0') || PG(safe_mode)) && (client_flags & CLIENT_LOCAL_FILES)) {
@@ -807,6 +808,7 @@ static void php_mysql_do_connect(INTERNAL_FUNCTION_PARAMETERS, int persistent)
 #endif
 			client_flags ^= CLIENT_LOCAL_FILES;
 		}
+#endif
 
 #ifdef CLIENT_MULTI_RESULTS
 		client_flags |= CLIENT_MULTI_RESULTS; /* compatibility with 5.2, see bug#50416 */

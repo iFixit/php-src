@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2015 The PHP Group                                |
+   | Copyright (c) 1997-2016 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -2543,7 +2543,12 @@ static int _php_curl_setopt(php_curl *ch, long option, zval **zvalue TSRMLS_DC) 
 					return 1;
 				}
 			}
-			zend_hash_index_update(ch->to_free->slist, (ulong) option, &slist, sizeof(struct curl_slist *), NULL);
+
+			if (Z_REFCOUNT_P(ch->clone) <= 1) {
+				zend_hash_index_update(ch->to_free->slist, (ulong) option, &slist, sizeof(struct curl_slist *), NULL);
+			} else {
+				zend_hash_next_index_insert(ch->to_free->slist, &slist, sizeof(struct curl_slist *), NULL);
+			}
 
 			error = curl_easy_setopt(ch->cp, option, slist);
 

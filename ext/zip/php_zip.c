@@ -2,7 +2,7 @@
   +----------------------------------------------------------------------+
   | PHP Version 5                                                        |
   +----------------------------------------------------------------------+
-  | Copyright (c) 1997-2015 The PHP Group                                |
+  | Copyright (c) 1997-2016 The PHP Group                                |
   +----------------------------------------------------------------------+
   | This source file is subject to version 3.01 of the PHP license,      |
   | that is bundled with this package in the file LICENSE, and is        |
@@ -2713,7 +2713,7 @@ static ZIPARCHIVE_METHOD(extractTo)
 
 		for (i = 0; i < filecount; i++) {
 			char *file = (char*)zip_get_name(intern, i, ZIP_FL_UNCHANGED);
-			if (!php_zip_extract_file(intern, pathto, file, strlen(file) TSRMLS_CC)) {
+			if (!file || !php_zip_extract_file(intern, pathto, file, strlen(file) TSRMLS_CC)) {
 					RETURN_FALSE;
 			}
 		}

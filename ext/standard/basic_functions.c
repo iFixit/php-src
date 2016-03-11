@@ -2,7 +2,7 @@
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
-   | Copyright (c) 1997-2015 The PHP Group                                |
+   | Copyright (c) 1997-2016 The PHP Group                                |
    +----------------------------------------------------------------------+
    | This source file is subject to version 3.01 of the PHP license,      |
    | that is bundled with this package in the file LICENSE, and is        |
@@ -451,8 +451,9 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_array_change_key_case, 0, 0, 1)
 	ZEND_ARG_INFO(0, case)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_INFO(arginfo_array_unique, 0)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_array_unique, 0, 0, 1)
 	ZEND_ARG_INFO(0, arg) /* ARRAY_INFO(0, arg, 0) */
+	ZEND_ARG_INFO(0, flags)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_array_intersect_key, 0, 0, 2)
@@ -3646,6 +3647,7 @@ PHP_MINIT_FUNCTION(basic) /* {{{ */
 #ifdef PHP_CAN_SUPPORT_PROC_OPEN
 	BASIC_MINIT_SUBMODULE(proc_open)
 #endif
+	BASIC_MINIT_SUBMODULE(exec)
 
 	BASIC_MINIT_SUBMODULE(user_streams)
 	BASIC_MINIT_SUBMODULE(imagetypes)
