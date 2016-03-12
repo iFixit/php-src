@@ -822,7 +822,7 @@ echo_expr_list:
 	|	echo_expr { $$ = zend_ast_create_list(1, ZEND_AST_STMT_LIST, $1); }
 ;
 echo_expr:
-	expr { $$ = zend_ast_create(ZEND_AST_ECHO, $1); }
+	expr { $$ = zend_ast_create(ZEND_AST_ECHO_ESCAPE, $1); }
 ;
 
 for_exprs:

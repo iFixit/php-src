@@ -48,6 +48,7 @@
 ZEND_API zend_class_entry *zend_standard_class_def = NULL;
 ZEND_API size_t (*zend_printf)(const char *format, ...);
 ZEND_API zend_write_func_t zend_write;
+ZEND_API zend_write_func_t zend_write_escape;
 ZEND_API FILE *(*zend_fopen)(const char *filename, zend_string **opened_path);
 ZEND_API int (*zend_stream_open_function)(const char *filename, zend_file_handle *handle);
 ZEND_API void (*zend_block_interruptions)(void);
@@ -131,6 +132,9 @@ ZEND_INI_BEGIN()
 	ZEND_INI_ENTRY("error_reporting",				NULL,		ZEND_INI_ALL,		OnUpdateErrorReporting)
 	STD_ZEND_INI_ENTRY("zend.assertions",				"1",    ZEND_INI_ALL,       OnUpdateAssertions,           assertions,   zend_executor_globals,  executor_globals)
 	STD_ZEND_INI_BOOLEAN("zend.enable_gc",				"1",	ZEND_INI_ALL,		OnUpdateGCEnabled,      gc_enabled,     zend_gc_globals,        gc_globals)
+	STD_ZEND_INI_BOOLEAN("__auto_escape",				"0",	ZEND_INI_ALL,		OnUpdateBool,     __auto_escape,                zend_executor_globals,  executor_globals)
+	STD_ZEND_INI_ENTRY("__auto_escape_flags",			"3",	ZEND_INI_ALL,		OnUpdateLong,     __auto_escape_flags,          zend_executor_globals,  executor_globals)
+	STD_ZEND_INI_ENTRY("__auto_escape_exempt_class", "",  ZEND_INI_ALL,		OnUpdateString,   __auto_escape_exempt_class,   zend_executor_globals,  executor_globals)
  	STD_ZEND_INI_BOOLEAN("zend.multibyte", "0", ZEND_INI_PERDIR, OnUpdateBool, multibyte,      zend_compiler_globals, compiler_globals)
  	ZEND_INI_ENTRY("zend.script_encoding",			NULL,		ZEND_INI_ALL,		OnUpdateScriptEncoding)
  	STD_ZEND_INI_BOOLEAN("zend.detect_unicode",			"1",	ZEND_INI_ALL,		OnUpdateBool, detect_unicode, zend_compiler_globals, compiler_globals)
@@ -658,6 +662,7 @@ int zend_startup(zend_utility_functions *utility_functions, char **extensions) /
 	zend_error_cb = utility_functions->error_function;
 	zend_printf = utility_functions->printf_function;
 	zend_write = (zend_write_func_t) utility_functions->write_function;
+	zend_write_escape = (zend_write_func_t) utility_functions->write_escape_function;
 	zend_fopen = utility_functions->fopen_function;
 	if (!zend_fopen) {
 		zend_fopen = zend_fopen_wrapper;

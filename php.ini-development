@@ -833,6 +833,24 @@ default_socket_timeout = 60
 ; http://php.net/auto-detect-line-endings
 ;auto_detect_line_endings = Off
 
+;;;;;;;;;;;;;;;;;
+; Auto escaping ;
+;;;;;;;;;;;;;;;;;
+
+; Whether to enable escaping of content from short php tags: '<?='
+; via htmlspecialchars()
+;__auto_escape = Off
+
+; The flags to pass to htmlspecialchars() for auto-escaped content.
+; Default is ENT_QUOTES == 3
+;__auto_escape_flags = 3
+
+; When using __auto_escape, if an instance of a class with this name
+; is outputted to short tags <?= $obj ?> its toString() will not be escaped and
+; will be passed directly to stdout.
+; Default is ""
+;__auto_escape_exempt_class = "HtmlString"
+
 ;;;;;;;;;;;;;;;;;;;;;;
 ; Dynamic Extensions ;
 ;;;;;;;;;;;;;;;;;;;;;;

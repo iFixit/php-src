@@ -1470,6 +1470,46 @@ ZEND_VM_HANDLER(40, ZEND_ECHO, CONST|TMPVAR|CV, ANY)
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+ZEND_VM_HANDLER(41, ZEND_ECHO_ESCAPE, CONST|TMPVAR|CV, ANY)
+{
+	USE_OPLINE
+	zend_free_op free_op1;
+	zval *z;
+
+	SAVE_OPLINE();
+	z = GET_OP1_ZVAL_PTR_UNDEF(BP_VAR_R);
+
+	if (Z_TYPE_P(z) == IS_STRING) {
+		zend_string *str = Z_STR_P(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			if (EG(__auto_escape)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		}
+	} else {
+		zend_string *str = _zval_get_string_func(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			// __auto_escape - If this is an object and it's not explicitly
+			// tagged as html, then use the escaping write function
+			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		} else if (OP1_TYPE == IS_CV && UNEXPECTED(Z_TYPE_P(z) == IS_UNDEF)) {
+			GET_OP1_UNDEF_CV(z, BP_VAR_R);
+		}
+		zend_string_release(str);
+	}
+
+	FREE_OP1();
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
 ZEND_VM_HELPER_EX(zend_fetch_var_address_helper, CONST|TMPVAR|CV, UNUSED|CONST|VAR, int type)
 {
 	USE_OPLINE

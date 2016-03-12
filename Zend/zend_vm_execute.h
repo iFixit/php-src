@@ -2882,6 +2882,45 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_SPEC_CONST_HANDLER(ZEND_O
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+
+	zval *z;
+
+	SAVE_OPLINE();
+	z = EX_CONSTANT(opline->op1);
+
+	if (Z_TYPE_P(z) == IS_STRING) {
+		zend_string *str = Z_STR_P(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			if (EG(__auto_escape)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		}
+	} else {
+		zend_string *str = _zval_get_string_func(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			// __auto_escape - If this is an object and it's not explicitly
+			// tagged as html, then use the escaping write function
+			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		} else if (IS_CONST == IS_CV && UNEXPECTED(Z_TYPE_P(z) == IS_UNDEF)) {
+			GET_OP1_UNDEF_CV(z, BP_VAR_R);
+		}
+		zend_string_release(str);
+	}
+
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
 static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_JMPZ_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -28298,6 +28337,45 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_SPEC_CV_HANDLER(ZEND_OPCO
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+
+	zval *z;
+
+	SAVE_OPLINE();
+	z = _get_zval_ptr_cv_undef(execute_data, opline->op1.var);
+
+	if (Z_TYPE_P(z) == IS_STRING) {
+		zend_string *str = Z_STR_P(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			if (EG(__auto_escape)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		}
+	} else {
+		zend_string *str = _zval_get_string_func(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			// __auto_escape - If this is an object and it's not explicitly
+			// tagged as html, then use the escaping write function
+			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		} else if (IS_CV == IS_CV && UNEXPECTED(Z_TYPE_P(z) == IS_UNDEF)) {
+			GET_OP1_UNDEF_CV(z, BP_VAR_R);
+		}
+		zend_string_release(str);
+	}
+
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
 static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_JMPZ_SPEC_CV_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -40204,6 +40282,46 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_SPEC_TMPVAR_HANDLER(ZEND_
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+	zend_free_op free_op1;
+	zval *z;
+
+	SAVE_OPLINE();
+	z = _get_zval_ptr_var(opline->op1.var, execute_data, &free_op1);
+
+	if (Z_TYPE_P(z) == IS_STRING) {
+		zend_string *str = Z_STR_P(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			if (EG(__auto_escape)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		}
+	} else {
+		zend_string *str = _zval_get_string_func(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			// __auto_escape - If this is an object and it's not explicitly
+			// tagged as html, then use the escaping write function
+			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		} else if ((IS_TMP_VAR|IS_VAR) == IS_CV && UNEXPECTED(Z_TYPE_P(z) == IS_UNDEF)) {
+			GET_OP1_UNDEF_CV(z, BP_VAR_R);
+		}
+		zend_string_release(str);
+	}
+
+	zval_ptr_dtor_nogc(free_op1);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
 static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_JMPZ_SPEC_TMPVAR_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -46407,31 +46525,31 @@ void zend_init_opcodes_handlers(void)
   	ZEND_ECHO_SPEC_CV_HANDLER,
   	ZEND_ECHO_SPEC_CV_HANDLER,
   	ZEND_ECHO_SPEC_CV_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
   	ZEND_NULL_HANDLER,
   	ZEND_NULL_HANDLER,
   	ZEND_NULL_HANDLER,
   	ZEND_NULL_HANDLER,
   	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
-  	ZEND_NULL_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER,
+  	ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER,
   	ZEND_JMP_SPEC_HANDLER,
   	ZEND_JMP_SPEC_HANDLER,
   	ZEND_JMP_SPEC_HANDLER,

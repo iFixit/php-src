@@ -1244,6 +1244,7 @@ simple_list:
 			goto tail_call;
 		case ZEND_AST_HALT_COMPILER:
 			APPEND_STR("__HALT_COMPILER()");
+		case ZEND_AST_ECHO_ESCAPE:
 		case ZEND_AST_ECHO:
 			APPEND_NODE_1("echo");
 		case ZEND_AST_THROW:
