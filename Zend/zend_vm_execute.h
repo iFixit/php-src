@@ -2525,6 +2525,49 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_SPEC_CONST_HANDLER(ZEND_O
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+// This is copied from ZEND_ECHO above with only a small part different
+static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+
+	zval *z;
+
+	SAVE_OPLINE();
+	z = RT_CONSTANT(opline, opline->op1);
+
+	if (Z_TYPE_P(z) == IS_STRING) {
+		zend_string *str = Z_STR_P(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			if (EG(__auto_escape)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		}
+	} else {
+		zend_string *str = _zval_get_string_func(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			// ===== This part differs from ZEND_ECHO
+			// __auto_escape - If this is an object and it's not explicitly
+			// tagged as html, then use the escaping write function
+			ZVAL_DEREF(z);
+			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+			// ===== End differences from ZEND_ECHO
+		} else if (IS_CONST == IS_CV && UNEXPECTED(Z_TYPE_P(z) == IS_UNDEF)) {
+			GET_OP1_UNDEF_CV(z, BP_VAR_R);
+		}
+		zend_string_release(str);
+	}
+
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
 static ZEND_VM_COLD ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_JMPZ_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -12380,6 +12423,50 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_SPEC_TMPVAR_HANDLER(ZEND_
 			GET_OP1_UNDEF_CV(z, BP_VAR_R);
 		}
 		zend_string_release_ex(str, 0);
+	}
+
+	zval_ptr_dtor_nogc(free_op1);
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
+// This is copied from ZEND_ECHO above with only a small part different
+static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+	zend_free_op free_op1;
+	zval *z;
+
+	SAVE_OPLINE();
+	z = _get_zval_ptr_var(opline->op1.var, &free_op1 EXECUTE_DATA_CC);
+
+	if (Z_TYPE_P(z) == IS_STRING) {
+		zend_string *str = Z_STR_P(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			if (EG(__auto_escape)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		}
+	} else {
+		zend_string *str = _zval_get_string_func(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			// ===== This part differs from ZEND_ECHO
+			// __auto_escape - If this is an object and it's not explicitly
+			// tagged as html, then use the escaping write function
+			ZVAL_DEREF(z);
+			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+			// ===== End differences from ZEND_ECHO
+		} else if ((IS_TMP_VAR|IS_VAR) == IS_CV && UNEXPECTED(Z_TYPE_P(z) == IS_UNDEF)) {
+			GET_OP1_UNDEF_CV(z, BP_VAR_R);
+		}
+		zend_string_release(str);
 	}
 
 	zval_ptr_dtor_nogc(free_op1);
@@ -36901,6 +36988,49 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_SPEC_CV_HANDLER(ZEND_OPCO
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+// This is copied from ZEND_ECHO above with only a small part different
+static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
+{
+	USE_OPLINE
+
+	zval *z;
+
+	SAVE_OPLINE();
+	z = EX_VAR(opline->op1.var);
+
+	if (Z_TYPE_P(z) == IS_STRING) {
+		zend_string *str = Z_STR_P(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			if (EG(__auto_escape)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		}
+	} else {
+		zend_string *str = _zval_get_string_func(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			// ===== This part differs from ZEND_ECHO
+			// __auto_escape - If this is an object and it's not explicitly
+			// tagged as html, then use the escaping write function
+			ZVAL_DEREF(z);
+			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+			// ===== End differences from ZEND_ECHO
+		} else if (IS_CV == IS_CV && UNEXPECTED(Z_TYPE_P(z) == IS_UNDEF)) {
+			GET_OP1_UNDEF_CV(z, BP_VAR_R);
+		}
+		zend_string_release(str);
+	}
+
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
 static ZEND_VM_HOT ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_JMPZ_SPEC_CV_HANDLER(ZEND_OPCODE_HANDLER_ARGS)
 {
 	USE_OPLINE
@@ -54414,6 +54544,11 @@ ZEND_API void execute_ex(zend_execute_data *ex)
 			(void*)&&ZEND_FETCH_LIST_W_SPEC_VAR_TMPVAR_LABEL,
 			(void*)&&ZEND_NULL_LABEL,
 			(void*)&&ZEND_FETCH_LIST_W_SPEC_VAR_CV_LABEL,
+			(void*)&&ZEND_ECHO_ESCAPE_SPEC_CONST_LABEL,
+			(void*)&&ZEND_ECHO_ESCAPE_SPEC_TMPVAR_LABEL,
+			(void*)&&ZEND_ECHO_ESCAPE_SPEC_TMPVAR_LABEL,
+			(void*)&&ZEND_NULL_LABEL,
+			(void*)&&ZEND_ECHO_ESCAPE_SPEC_CV_LABEL,
 			(void*)&&ZEND_JMP_FORWARD_SPEC_LABEL,
 			(void*)&&ZEND_NULL_LABEL,
 			(void*)&&ZEND_NULL_LABEL,
@@ -55632,6 +55767,10 @@ zend_leave_helper_SPEC_LABEL:
 				VM_TRACE(ZEND_ECHO_SPEC_CONST)
 				ZEND_ECHO_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
 				HYBRID_BREAK();
+			HYBRID_CASE(ZEND_ECHO_ESCAPE_SPEC_CONST):
+				VM_TRACE(ZEND_ECHO_ESCAPE_SPEC_CONST)
+				ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
+				HYBRID_BREAK();
 			HYBRID_CASE(ZEND_JMPZ_SPEC_CONST):
 				VM_TRACE(ZEND_JMPZ_SPEC_CONST)
 				ZEND_JMPZ_SPEC_CONST_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
@@ -56833,6 +56972,10 @@ zend_leave_helper_SPEC_LABEL:
 			HYBRID_CASE(ZEND_ECHO_SPEC_TMPVAR):
 				VM_TRACE(ZEND_ECHO_SPEC_TMPVAR)
 				ZEND_ECHO_SPEC_TMPVAR_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
+				HYBRID_BREAK();
+			HYBRID_CASE(ZEND_ECHO_ESCAPE_SPEC_TMPVAR):
+				VM_TRACE(ZEND_ECHO_ESCAPE_SPEC_TMPVAR)
+				ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
 				HYBRID_BREAK();
 			HYBRID_CASE(ZEND_JMPZ_SPEC_TMPVAR):
 				VM_TRACE(ZEND_JMPZ_SPEC_TMPVAR)
@@ -59245,6 +59388,10 @@ zend_leave_helper_SPEC_LABEL:
 			HYBRID_CASE(ZEND_ECHO_SPEC_CV):
 				VM_TRACE(ZEND_ECHO_SPEC_CV)
 				ZEND_ECHO_SPEC_CV_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
+				HYBRID_BREAK();
+			HYBRID_CASE(ZEND_ECHO_ESCAPE_SPEC_CV):
+				VM_TRACE(ZEND_ECHO_ESCAPE_SPEC_CV)
+				ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER(ZEND_OPCODE_HANDLER_ARGS_PASSTHRU);
 				HYBRID_BREAK();
 			HYBRID_CASE(ZEND_JMPZ_SPEC_CV):
 				VM_TRACE(ZEND_JMPZ_SPEC_CV)
@@ -63913,6 +64060,11 @@ void zend_vm_init(void)
 		ZEND_FETCH_LIST_W_SPEC_VAR_TMPVAR_HANDLER,
 		ZEND_NULL_HANDLER,
 		ZEND_FETCH_LIST_W_SPEC_VAR_CV_HANDLER,
+		ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER,
+		ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+		ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLER,
+		ZEND_NULL_HANDLER,
+		ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER,
 		ZEND_JMP_FORWARD_SPEC_HANDLER,
 		ZEND_NULL_HANDLER,
 		ZEND_NULL_HANDLER,
@@ -65008,7 +65160,8 @@ void zend_vm_init(void)
 		3019,
 		3020 | SPEC_RULE_ISSET,
 		3022 | SPEC_RULE_OP2,
-		3920
+		3027 | SPEC_RULE_OP1,
+		3925
 	};
 #if (ZEND_VM_KIND == ZEND_VM_KIND_HYBRID)
 	zend_opcode_handler_funcs = labels;
@@ -65208,7 +65361,7 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3028 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 3033 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 				if (op->op1_type < op->op2_type) {
 					zend_swap_operands(op);
 				}
@@ -65216,7 +65369,7 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3053 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 3058 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 				if (op->op1_type < op->op2_type) {
 					zend_swap_operands(op);
 				}
@@ -65224,7 +65377,7 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3078 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 3083 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 				if (op->op1_type < op->op2_type) {
 					zend_swap_operands(op);
 				}
@@ -65235,17 +65388,17 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3103 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
+				spec = 3108 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
 			} else if (op1_info == MAY_BE_LONG && op2_info == MAY_BE_LONG) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3128 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
+				spec = 3133 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3153 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
+				spec = 3158 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
 			}
 			break;
 		case ZEND_MUL:
@@ -65256,17 +65409,17 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3178 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 3183 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_LONG && op2_info == MAY_BE_LONG) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3203 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 3208 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3228 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
+				spec = 3233 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_COMMUTATIVE;
 			}
 			break;
 		case ZEND_IS_EQUAL:
@@ -65277,12 +65430,12 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3253 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3258 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3328 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3333 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			}
 			break;
 		case ZEND_IS_NOT_EQUAL:
@@ -65293,12 +65446,12 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3403 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3408 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3478 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
+				spec = 3483 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH | SPEC_RULE_COMMUTATIVE;
 			}
 			break;
 		case ZEND_IS_SMALLER:
@@ -65306,12 +65459,12 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3553 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
+				spec = 3558 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3628 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
+				spec = 3633 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
 			}
 			break;
 		case ZEND_IS_SMALLER_OR_EQUAL:
@@ -65319,75 +65472,75 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3703 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
+				spec = 3708 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
 			} else if (op1_info == MAY_BE_DOUBLE && op2_info == MAY_BE_DOUBLE) {
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3778 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
+				spec = 3783 | SPEC_RULE_OP1 | SPEC_RULE_OP2 | SPEC_RULE_SMART_BRANCH;
 			}
 			break;
 		case ZEND_QM_ASSIGN:
 			if (op1_info == MAY_BE_DOUBLE) {
-				spec = 3871 | SPEC_RULE_OP1;
-			} else if ((op->op1_type == IS_CONST) ? !Z_REFCOUNTED_P(RT_CONSTANT(op, op->op1)) : (!(op1_info & ((MAY_BE_ANY|MAY_BE_UNDEF)-(MAY_BE_NULL|MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_LONG|MAY_BE_DOUBLE))))) {
 				spec = 3876 | SPEC_RULE_OP1;
+			} else if ((op->op1_type == IS_CONST) ? !Z_REFCOUNTED_P(RT_CONSTANT(op, op->op1)) : (!(op1_info & ((MAY_BE_ANY|MAY_BE_UNDEF)-(MAY_BE_NULL|MAY_BE_FALSE|MAY_BE_TRUE|MAY_BE_LONG|MAY_BE_DOUBLE))))) {
+				spec = 3881 | SPEC_RULE_OP1;
 			}
 			break;
 		case ZEND_PRE_INC:
 			if (res_info == MAY_BE_LONG && op1_info == MAY_BE_LONG) {
-				spec = 3853 | SPEC_RULE_RETVAL;
+				spec = 3858 | SPEC_RULE_RETVAL;
 			} else if (op1_info == MAY_BE_LONG) {
-				spec = 3855 | SPEC_RULE_RETVAL;
+				spec = 3860 | SPEC_RULE_RETVAL;
 			} else if (op1_info == (MAY_BE_LONG|MAY_BE_DOUBLE)) {
-				spec = 3857 | SPEC_RULE_RETVAL;
+				spec = 3862 | SPEC_RULE_RETVAL;
 			}
 			break;
 		case ZEND_PRE_DEC:
 			if (res_info == MAY_BE_LONG && op1_info == MAY_BE_LONG) {
-				spec = 3859 | SPEC_RULE_RETVAL;
+				spec = 3864 | SPEC_RULE_RETVAL;
 			} else if (op1_info == MAY_BE_LONG) {
-				spec = 3861 | SPEC_RULE_RETVAL;
+				spec = 3866 | SPEC_RULE_RETVAL;
 			} else if (op1_info == (MAY_BE_LONG|MAY_BE_DOUBLE)) {
-				spec = 3863 | SPEC_RULE_RETVAL;
+				spec = 3868 | SPEC_RULE_RETVAL;
 			}
 			break;
 		case ZEND_POST_INC:
 			if (res_info == MAY_BE_LONG && op1_info == MAY_BE_LONG) {
-				spec = 3865;
+				spec = 3870;
 			} else if (op1_info == MAY_BE_LONG) {
-				spec = 3866;
+				spec = 3871;
 			} else if (op1_info == (MAY_BE_LONG|MAY_BE_DOUBLE)) {
-				spec = 3867;
+				spec = 3872;
 			}
 			break;
 		case ZEND_POST_DEC:
 			if (res_info == MAY_BE_LONG && op1_info == MAY_BE_LONG) {
-				spec = 3868;
+				spec = 3873;
 			} else if (op1_info == MAY_BE_LONG) {
-				spec = 3869;
+				spec = 3874;
 			} else if (op1_info == (MAY_BE_LONG|MAY_BE_DOUBLE)) {
-				spec = 3870;
+				spec = 3875;
 			}
 			break;
 		case ZEND_JMP:
 			if (OP_JMP_ADDR(op, op->op1) > op) {
-				spec = 3027;
+				spec = 3032;
 			}
 			break;
 		case ZEND_SEND_VAL:
 			if (op->op1_type == IS_CONST && !Z_REFCOUNTED_P(RT_CONSTANT(op, op->op1))) {
-				spec = 3916;
+				spec = 3921;
 			}
 			break;
 		case ZEND_SEND_VAR_EX:
 			if (op->op2.num <= MAX_ARG_FLAG_NUM && (op1_info & (MAY_BE_UNDEF|MAY_BE_REF)) == 0) {
-				spec = 3911 | SPEC_RULE_OP1;
+				spec = 3916 | SPEC_RULE_OP1;
 			}
 			break;
 		case ZEND_FE_FETCH_R:
 			if (op->op2_type == IS_CV && (op1_info & (MAY_BE_UNDEF|MAY_BE_ANY|MAY_BE_REF)) == MAY_BE_ARRAY) {
-				spec = 3918 | SPEC_RULE_RETVAL;
+				spec = 3923 | SPEC_RULE_RETVAL;
 			}
 			break;
 		case ZEND_FETCH_DIM_R:
@@ -65395,17 +65548,17 @@ ZEND_API void ZEND_FASTCALL zend_vm_set_opcode_handler_ex(zend_op* op, uint32_t 
 				if (op->op1_type == IS_CONST && op->op2_type == IS_CONST) {
 					break;
 				}
-				spec = 3881 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
+				spec = 3886 | SPEC_RULE_OP1 | SPEC_RULE_OP2;
 			}
 			break;
 		case ZEND_SEND_VAL_EX:
 			if (op->op2.num <= MAX_ARG_FLAG_NUM && op->op1_type == IS_CONST && !Z_REFCOUNTED_P(RT_CONSTANT(op, op->op1))) {
-				spec = 3917;
+				spec = 3922;
 			}
 			break;
 		case ZEND_SEND_VAR:
 			if ((op1_info & (MAY_BE_UNDEF|MAY_BE_REF)) == 0) {
-				spec = 3906 | SPEC_RULE_OP1;
+				spec = 3911 | SPEC_RULE_OP1;
 			}
 			break;
 		case ZEND_BW_OR:
