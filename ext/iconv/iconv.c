@@ -165,7 +165,7 @@ zend_module_entry iconv_module_entry = {
 
 #ifdef COMPILE_DL_ICONV
 #ifdef ZTS
-ZEND_TSRMLS_CACHE_DEFINE();
+ZEND_TSRMLS_CACHE_DEFINE()
 #endif
 ZEND_GET_MODULE(iconv)
 #endif
@@ -720,7 +720,6 @@ PHP_ICONV_API php_iconv_err_t php_iconv_string(const char *in_p, size_t in_len, 
 
 			default:
 				/* other error */
-				retval = PHP_ICONV_ERR_UNKNOWN;
 				zend_string_free(out_buf);
 				return PHP_ICONV_ERR_UNKNOWN;
 		}
@@ -858,7 +857,7 @@ static php_iconv_err_t _php_iconv_substr(smart_str *pretval,
 	}
 
 
-	if ((size_t)offset >= total_len) {
+	if ((size_t)offset > total_len) {
 		return PHP_ICONV_ERR_SUCCESS;
 	}
 
@@ -2108,7 +2107,7 @@ PHP_FUNCTION(iconv_substr)
 	err = _php_iconv_substr(&retval, ZSTR_VAL(str), ZSTR_LEN(str), offset, length, charset);
 	_php_iconv_show_error(err, GENERIC_SUPERSET_NAME, charset);
 
-	if (err == PHP_ICONV_ERR_SUCCESS && ZSTR_LEN(str) > 0 && retval.s != NULL) {
+	if (err == PHP_ICONV_ERR_SUCCESS && ZSTR_LEN(str) >= 0 && retval.s != NULL) {
 		RETURN_NEW_STR(retval.s);
 	}
 	smart_str_free(&retval);
@@ -2121,7 +2120,7 @@ PHP_FUNCTION(iconv_substr)
 PHP_FUNCTION(iconv_strpos)
 {
 	char *charset = get_internal_encoding();
-	size_t charset_len = 0;
+	size_t charset_len = 0, haystk_len;
 	zend_string *haystk;
 	zend_string *ndl;
 	zend_long offset = 0;
@@ -2142,8 +2141,17 @@ PHP_FUNCTION(iconv_strpos)
 	}
 
 	if (offset < 0) {
-		php_error_docref(NULL, E_WARNING, "Offset not contained in string.");
-		RETURN_FALSE;
+		/* Convert negative offset (counted from the end of string) */
+		err = _php_iconv_strlen(&haystk_len, ZSTR_VAL(haystk), ZSTR_LEN(haystk), charset);
+		if (err != PHP_ICONV_ERR_SUCCESS) {
+			_php_iconv_show_error(err, GENERIC_SUPERSET_NAME, charset);
+			RETURN_FALSE;
+		}
+		offset += haystk_len;
+		if (offset < 0) { /* If offset before start */
+			php_error_docref(NULL, E_WARNING, "Offset not contained in string.");
+			RETURN_FALSE;
+		}
 	}
 
 	if (ZSTR_LEN(ndl) < 1) {

@@ -1,8 +1,6 @@
 --TEST--
 Bug #69111 Crash in SessionHandler::read()
 --SKIPIF--
---XFAIL--
-It is still a leak
 <?php include('skipif.inc'); ?>
 --FILE--
 <?php
@@ -19,4 +17,9 @@ $sh->write("foo", "bar");
 var_dump($sh->read(@$id));
 ?>
 --EXPECTF--
+Warning: SessionHandler::open(): Session is not active in %s on line 10
+
+Warning: SessionHandler::write(): Session is not active in %s on line 11
+
+Warning: SessionHandler::read(): Session is not active in %s on line 12
 bool(false)

@@ -1499,7 +1499,7 @@ int LSAPI_ReqBodyGetLine_r( LSAPI_Request * pReq, char * pBuf, size_t bufLen, in
     char * pBufCur = pBuf;
     char * pCur;
     char * p;
-    if (!pReq || (pReq->m_fd ==-1) ||( !pBuf )|| !getLF )
+    if (!pReq || (pReq->m_fd ==-1) ||( !pBuf )||(bufLen < 0 )|| !getLF )
         return -1;
     *getLF = 0;
     while( (left = pBufEnd - pBufCur ) > 0 )
@@ -1543,7 +1543,7 @@ ssize_t LSAPI_ReadReqBody_r( LSAPI_Request * pReq, char * pBuf, size_t bufLen )
     ssize_t len;
     off_t total;
     /* char *pOldBuf = pBuf; */
-    if (!pReq || (pReq->m_fd ==-1) || ( !pBuf ))
+    if (!pReq || (pReq->m_fd ==-1) || ( !pBuf )||(bufLen < 0 ))
         return -1;
 
     total = pReq->m_reqBodyLen - pReq->m_reqBodyRead;
@@ -2639,7 +2639,6 @@ static int lsapi_init_children_status()
         perror( "Anonymous mmap() failed" );
         return -1;
     }
-    memset( pBuf, 0, size );
     g_prefork_server->m_pChildrenStatus = (lsapi_child_status *)pBuf;
     g_prefork_server->m_pChildrenStatusCur = (lsapi_child_status *)pBuf;
     g_prefork_server->m_pChildrenStatusEnd = (lsapi_child_status *)pBuf + size / sizeof( lsapi_child_status );

@@ -155,7 +155,7 @@ ZEND_DECLARE_MODULE_GLOBALS(exif)
 #define EXIF_G(v) ZEND_MODULE_GLOBALS_ACCESSOR(exif, v)
 
 #if defined(ZTS) && defined(COMPILE_DL_EXIF)
-ZEND_TSRMLS_CACHE_DEFINE();
+ZEND_TSRMLS_CACHE_DEFINE()
 #endif
 
 /* {{{ PHP_INI
@@ -1703,6 +1703,10 @@ static void exif_iif_add_value(image_info_type *image_info, int section_index, c
 				break;
 		case TAG_FMT_UNDEFINED:
 			if (value) {
+				if (tag == TAG_MAKER_NOTE) {
+					length = MIN(length, strlen(value));
+				}
+
 				/* do not recompute length here */
 				info_value->s = estrndup(value, length);
 				info_data->length = length;
@@ -2604,6 +2608,7 @@ static int exif_process_user_comment(image_info_type *ImageInfo, char **pszInfoP
 	*pszEncoding = NULL;
 	/* Copy the comment */
 	if (ByteCount>=8) {
+		const zend_encoding *from, *to;
 		if (!memcmp(szValuePtr, "UNICODE\0", 8)) {
 			*pszEncoding = estrdup((const char*)szValuePtr);
 			szValuePtr = szValuePtr+8;
@@ -2624,15 +2629,16 @@ static int exif_process_user_comment(image_info_type *ImageInfo, char **pszInfoP
 			} else {
 				decode = ImageInfo->decode_unicode_le;
 			}
+			to = zend_multibyte_fetch_encoding(ImageInfo->encode_unicode);
+			from = zend_multibyte_fetch_encoding(decode);
 			/* XXX this will fail again if encoding_converter returns on error something different than SIZE_MAX   */
-			if (zend_multibyte_encoding_converter(
+			if (!to || !from || zend_multibyte_encoding_converter(
 					(unsigned char**)pszInfoPtr,
 					&len,
 					(unsigned char*)szValuePtr,
 					ByteCount,
-					zend_multibyte_fetch_encoding(ImageInfo->encode_unicode),
-					zend_multibyte_fetch_encoding(decode)
-					) == (size_t)-1) {
+					to,
+					from) == (size_t)-1) {
 				len = exif_process_string_raw(pszInfoPtr, szValuePtr, ByteCount);
 			}
 			return len;
@@ -2646,14 +2652,15 @@ static int exif_process_user_comment(image_info_type *ImageInfo, char **pszInfoP
 			szValuePtr = szValuePtr+8;
 			ByteCount -= 8;
 			/* XXX this will fail again if encoding_converter returns on error something different than SIZE_MAX   */
-			if (zend_multibyte_encoding_converter(
+			to = zend_multibyte_fetch_encoding(ImageInfo->encode_jis);
+			from = zend_multibyte_fetch_encoding(ImageInfo->motorola_intel ? ImageInfo->decode_jis_be : ImageInfo->decode_jis_le);
+			if (!to || !from || zend_multibyte_encoding_converter(
 					(unsigned char**)pszInfoPtr,
 					&len,
 					(unsigned char*)szValuePtr,
 					ByteCount,
-					zend_multibyte_fetch_encoding(ImageInfo->encode_jis),
-					zend_multibyte_fetch_encoding(ImageInfo->motorola_intel ? ImageInfo->decode_jis_be : ImageInfo->decode_jis_le)
-					) == (size_t)-1) {
+					to,
+					from) == (size_t)-1) {
 				len = exif_process_string_raw(pszInfoPtr, szValuePtr, ByteCount);
 			}
 			return len;
@@ -2703,14 +2710,21 @@ static int exif_process_unicode(image_info_type *ImageInfo, xp_field_type *xp_fi
  * Process nested IFDs directories in Maker Note. */
 static int exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * value_ptr, int value_len, char *offset_base, size_t IFDlength, size_t displacement)
 {
-	int de, i=0, section_index = SECTION_MAKERNOTE;
+	size_t i;
+	int de, section_index = SECTION_MAKERNOTE;
 	int NumDirEntries, old_motorola_intel, offset_diff;
 	const maker_note_type *maker_note;
 	char *dir_start;
 
 	for (i=0; i<=sizeof(maker_note_array)/sizeof(maker_note_type); i++) {
-		if (i==sizeof(maker_note_array)/sizeof(maker_note_type))
-			return FALSE;
+		if (i==sizeof(maker_note_array)/sizeof(maker_note_type)) {
+#ifdef EXIF_DEBUG
+			exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "No maker note data found. Detected maker: %s (length = %d)", ImageInfo->make, strlen(ImageInfo->make));
+#endif
+			/* unknown manufacturer, not an error, use it as a string */
+			return TRUE;
+		}
+
 		maker_note = maker_note_array+i;
 
 		/*exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "check (%s,%s)", maker_note->make?maker_note->make:"", maker_note->model?maker_note->model:"");*/
@@ -2721,6 +2735,12 @@ static int exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * valu
 		if (maker_note->id_string && strncmp(maker_note->id_string, value_ptr, maker_note->id_string_len))
 			continue;
 		break;
+	}
+
+	if (maker_note->offset >= value_len) {
+		/* Do not go past the value end */
+		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "IFD data too short: 0x%04X offset 0x%04X", value_len, maker_note->offset);
+		return FALSE;
 	}
 
 	dir_start = value_ptr + maker_note->offset;
@@ -2751,10 +2771,19 @@ static int exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * valu
 			offset_base = value_ptr;
 			break;
 		case MN_OFFSET_GUESS:
+			if (maker_note->offset + 10 + 4 >= value_len) {
+				/* Can not read dir_start+10 since it's beyond value end */
+				exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "IFD data too short: 0x%04X", value_len);
+				return FALSE;
+			}
 			offset_diff = 2 + NumDirEntries*12 + 4 - php_ifd_get32u(dir_start+10, ImageInfo->motorola_intel);
 #ifdef EXIF_DEBUG
 			exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "Using automatic offset correction: 0x%04X", ((int)dir_start-(int)offset_base+maker_note->offset+displacement) + offset_diff);
 #endif
+			if (offset_diff < 0 || offset_diff >= value_len ) {
+				exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "IFD data bad offset: 0x%04X length 0x%04X", offset_diff, value_len);
+				return FALSE;
+			}
 			offset_base = value_ptr + offset_diff;
 			break;
 		default:
@@ -2763,7 +2792,7 @@ static int exif_process_IFD_in_MAKERNOTE(image_info_type *ImageInfo, char * valu
 	}
 
 	if ((2+NumDirEntries*12) > value_len) {
-		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "Illegal IFD size: 2 + x%04X*12 = x%04X > x%04X", NumDirEntries, 2+NumDirEntries*12, value_len);
+		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "Illegal IFD size: 2 + 0x%04X*12 = 0x%04X > 0x%04X", NumDirEntries, 2+NumDirEntries*12, value_len);
 		return FALSE;
 	}
 
@@ -2869,11 +2898,11 @@ static int exif_process_IFD_TAG(image_info_type *ImageInfo, char *dir_entry, cha
 			}
 
 			fpos = php_stream_tell(ImageInfo->infile);
-			php_stream_seek(ImageInfo->infile, offset_val, SEEK_SET);
+			php_stream_seek(ImageInfo->infile, displacement+offset_val, SEEK_SET);
 			fgot = php_stream_tell(ImageInfo->infile);
-			if (fgot!=offset_val) {
+			if (fgot!=displacement+offset_val) {
 				EFREE_IF(outside);
-				exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_WARNING, "Wrong file pointer: 0x%08X != 0x%08X", fgot, offset_val);
+				exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_WARNING, "Wrong file pointer: 0x%08X != 0x%08X", fgot, displacement+offset_val);
 				return FALSE;
 			}
 			fgot = php_stream_read(ImageInfo->infile, value_ptr, byte_count);
@@ -2946,7 +2975,7 @@ static int exif_process_IFD_TAG(image_info_type *ImageInfo, char *dir_entry, cha
 						/* When there are any characters after the first NUL */
 						ImageInfo->CopyrightPhotographer  = estrdup(value_ptr);
 						ImageInfo->CopyrightEditor        = estrndup(value_ptr+length+1, byte_count-length-1);
-						spprintf(&ImageInfo->Copyright, 0, "%s, %s", value_ptr, value_ptr+length+1);
+						spprintf(&ImageInfo->Copyright, 0, "%s, %s", ImageInfo->CopyrightPhotographer, ImageInfo->CopyrightEditor);
 						/* format = TAG_FMT_UNDEFINED; this musn't be ASCII         */
 						/* but we are not supposed to change this                   */
 						/* keep in mind that image_info does not store editor value */
@@ -3049,7 +3078,10 @@ static int exif_process_IFD_TAG(image_info_type *ImageInfo, char *dir_entry, cha
 				break;
 
 			case TAG_MAKER_NOTE:
-				exif_process_IFD_in_MAKERNOTE(ImageInfo, value_ptr, byte_count, offset_base, IFDlength, displacement);
+				if (!exif_process_IFD_in_MAKERNOTE(ImageInfo, value_ptr, byte_count, offset_base, IFDlength, displacement)) {
+					EFREE_IF(outside);
+					return FALSE;
+				}
 				break;
 
 			case TAG_EXIF_IFD_POINTER:
@@ -3115,6 +3147,11 @@ static int exif_process_IFD_in_JPEG(image_info_type *ImageInfo, char *dir_start,
 
 	ImageInfo->sections_found |= FOUND_IFD0;
 
+	if ((dir_start + 2) >= (offset_base+IFDlength)) {
+		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "Illegal IFD size");
+		return FALSE;
+	}
+
 	NumDirEntries = php_ifd_get16u(dir_start, ImageInfo->motorola_intel);
 
 	if ((dir_start+2+NumDirEntries*12) > (offset_base+IFDlength)) {
@@ -3138,6 +3175,10 @@ static int exif_process_IFD_in_JPEG(image_info_type *ImageInfo, char *dir_start,
 	 * Hack to make it process IDF1 I hope
 	 * There are 2 IDFs, the second one holds the keys (0x0201 and 0x0202) to the thumbnail
 	 */
+	if ((dir_start+2+12*de + 4) >= (offset_base+IFDlength)) {
+		exif_error_docref("exif_read_data#error_ifd" EXIFERR_CC, ImageInfo, E_WARNING, "Illegal IFD size");
+		return FALSE;
+	}
 	NextDirOffset = php_ifd_get32u(dir_start+2+12*de, ImageInfo->motorola_intel);
 	if (NextDirOffset) {
 		/* the next line seems false but here IFDlength means length of all IFDs */
@@ -3187,9 +3228,13 @@ static void exif_process_TIFF_in_JPEG(image_info_type *ImageInfo, char *CharBuf,
 	}
 
 	/* Check the next two values for correctness. */
+	if (length < 8) {
+		exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_WARNING, "Invalid TIFF start (1)");
+		return;
+	}
 	exif_value_2a = php_ifd_get16u(CharBuf+2, ImageInfo->motorola_intel);
 	offset_of_ifd = php_ifd_get32u(CharBuf+4, ImageInfo->motorola_intel);
-	if ( exif_value_2a != 0x2a || offset_of_ifd < 0x08) {
+	if (exif_value_2a != 0x2a || offset_of_ifd < 0x08) {
 		exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_WARNING, "Invalid TIFF start (1)");
 		return;
 	}
@@ -3304,11 +3349,11 @@ static int exif_scan_JPEG_header(image_info_type *ImageInfo)
 		}
 
 		/* Read the length of the section. */
-		if ((lh = php_stream_getc(ImageInfo->infile)) == EOF) {
+		if ((lh = php_stream_getc(ImageInfo->infile)) == (unsigned int)EOF) {
 			EXIF_ERRLOG_CORRUPT(ImageInfo)
 			return FALSE;
 		}
-		if ((ll = php_stream_getc(ImageInfo->infile)) == EOF) {
+		if ((ll = php_stream_getc(ImageInfo->infile)) == (unsigned int)EOF) {
 			EXIF_ERRLOG_CORRUPT(ImageInfo)
 			return FALSE;
 		}
@@ -3679,8 +3724,11 @@ static int exif_process_IFD_in_TIFF(image_info_type *ImageInfo, size_t dir_offse
 									fgot = php_stream_read(ImageInfo->infile, ImageInfo->Thumbnail.data, ImageInfo->Thumbnail.size);
 									if (fgot < ImageInfo->Thumbnail.size) {
 										EXIF_ERRLOG_THUMBEOF(ImageInfo)
+										efree(ImageInfo->Thumbnail.data);
+										ImageInfo->Thumbnail.data = NULL;
+									} else {
+										exif_thumbnail_build(ImageInfo);
 									}
-									exif_thumbnail_build(ImageInfo);
 								}
 							}
 						}
@@ -3713,8 +3761,11 @@ static int exif_process_IFD_in_TIFF(image_info_type *ImageInfo, size_t dir_offse
 						fgot = php_stream_read(ImageInfo->infile, ImageInfo->Thumbnail.data, ImageInfo->Thumbnail.size);
 						if (fgot < ImageInfo->Thumbnail.size) {
 							EXIF_ERRLOG_THUMBEOF(ImageInfo)
+							efree(ImageInfo->Thumbnail.data);
+							ImageInfo->Thumbnail.data = NULL;
+						} else {
+							exif_thumbnail_build(ImageInfo);
 						}
-						exif_thumbnail_build(ImageInfo);
 					}
 #ifdef EXIF_DEBUG
 					exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_NOTICE, "Read next IFD (THUMBNAIL) done");
@@ -4074,7 +4125,7 @@ PHP_FUNCTION(exif_read_data)
 	exif_discard_imageinfo(&ImageInfo);
 
 #ifdef EXIF_DEBUG
-	php_error_docref1(NULL, Z_STRVAL_PP(p_name), E_NOTICE, "done");
+	php_error_docref1(NULL, p_name, E_NOTICE, "done");
 #endif
 }
 /* }}} */

@@ -6,11 +6,11 @@ PHP_ARG_ENABLE(opcache, whether to enable Zend OPcache support,
 [  --disable-opcache       Disable Zend OPcache support], yes)
 
 PHP_ARG_ENABLE(opcache-file, whether to enable file based caching,
-[  --disable-opcache-file  Disable file based caching], yes)
+[  --disable-opcache-file  Disable file based caching], yes, no)
 
 PHP_ARG_ENABLE(huge-code-pages, whether to enable copying PHP CODE pages into HUGE PAGES,
 [  --disable-huge-code-pages
-                          Disable copying PHP CODE pages into HUGE PAGES], yes)
+                          Disable copying PHP CODE pages into HUGE PAGES], yes, no)
 
 if test "$PHP_OPCACHE" != "no"; then
 
@@ -376,7 +376,7 @@ AC_TRY_RUN([
     AC_MSG_RESULT("yes")
 ], AC_MSG_RESULT("no") )
 
-if test "$flock_type" == "unknown"; then
+if test "$flock_type" = "unknown"; then
 	AC_MSG_ERROR([Don't know how to define struct flock on this system[,] set --enable-opcache=no])
 fi
 
@@ -402,7 +402,15 @@ fi
 	Optimizer/block_pass.c \
 	Optimizer/optimize_temp_vars_5.c \
 	Optimizer/nop_removal.c \
-	Optimizer/compact_literals.c,
+	Optimizer/compact_literals.c \
+	Optimizer/zend_cfg.c \
+	Optimizer/zend_dfg.c \
+	Optimizer/dfa_pass.c \
+	Optimizer/zend_ssa.c \
+	Optimizer/zend_inference.c \
+	Optimizer/zend_func_info.c \
+	Optimizer/zend_call_graph.c \
+	Optimizer/zend_dump.c,
 	shared,,-DZEND_ENABLE_STATIC_TSRMLS_CACHE=1,,yes)
 
   PHP_ADD_BUILD_DIR([$ext_builddir/Optimizer], 1)

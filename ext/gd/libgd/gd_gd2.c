@@ -138,16 +138,29 @@ static int _gd2GetHeader(gdIOCtxPtr in, int *sx, int *sy, int *cs, int *vers, in
 	if (gd2_compressed(*fmt)) {
 		nc = (*ncx) * (*ncy);
 		GD2_DBG(php_gd_error("Reading %d chunk index entries", nc));
+		if (overflow2(sizeof(t_chunk_info), nc)) {
+			goto fail1;
+		}
 		sidx = sizeof(t_chunk_info) * nc;
 		if (sidx <= 0) {
 			goto fail1;
 		}
 		cidx = gdCalloc(sidx, 1);
+		if (cidx == NULL) {
+			goto fail1;
+		}
+
 		for (i = 0; i < nc; i++) {
 			if (gdGetInt(&cidx[i].offset, in) != 1) {
+				gdFree(cidx);
 				goto fail1;
 			}
 			if (gdGetInt(&cidx[i].size, in) != 1) {
+				gdFree(cidx);
+				goto fail1;
+			}
+			if (cidx[i].offset < 0 || cidx[i].size < 0) {
+				gdFree(cidx);
 				goto fail1;
 			}
 		}
@@ -178,21 +191,21 @@ static gdImagePtr _gd2CreateFromFile (gdIOCtxPtr in, int *sx, int *sy, int *cs, 
 	}
 	if (im == NULL) {
 		GD2_DBG(php_gd_error("Could not create gdImage"));
-		goto fail1;
+		goto fail2;
 	}
 
 	if (!_gdGetColors(in, im, (*vers) == 2)) {
 		GD2_DBG(php_gd_error("Could not read color palette"));
-		goto fail2;
+		goto fail3;
 	}
 	GD2_DBG(php_gd_error("Image palette completed: %d colours", im->colorsTotal));
 
 	return im;
 
-fail2:
+fail3:
 	gdImageDestroy(im);
-	return 0;
-
+fail2:
+	gdFree(*cidx);
 fail1:
 	return 0;
 }
@@ -657,7 +670,7 @@ static void _gdImageGd2 (gdImagePtr im, gdIOCtx * out, int cs, int fmt)
 
 	/* Force fmt to a valid value since we don't return anything. */
 	if ((fmt != GD2_FMT_RAW) && (fmt != GD2_FMT_COMPRESSED)) {
-		fmt = im->trueColor ? GD2_FMT_TRUECOLOR_COMPRESSED : GD2_FMT_COMPRESSED;
+		fmt = GD2_FMT_COMPRESSED;
 	}
 	if (im->trueColor) {
 		fmt += 2;
@@ -676,8 +689,8 @@ static void _gdImageGd2 (gdImagePtr im, gdIOCtx * out, int cs, int fmt)
 	}
 
 	/* Work out number of chunks. */
-	ncx = im->sx / cs + 1;
-	ncy = im->sy / cs + 1;
+	ncx = (im->sx + cs - 1) / cs;
+	ncy = (im->sy + cs - 1) / cs;
 
 	/* Write the standard header. */
 	_gd2PutHeader (im, out, cs, fmt, ncx, ncy);

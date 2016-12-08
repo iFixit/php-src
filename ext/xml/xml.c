@@ -63,11 +63,15 @@ ZEND_DECLARE_MODULE_GLOBALS(xml)
 /* {{{ dynamically loadable module stuff */
 #ifdef COMPILE_DL_XML
 #ifdef ZTS
-ZEND_TSRMLS_CACHE_DEFINE();
+ZEND_TSRMLS_CACHE_DEFINE()
 #endif
 ZEND_GET_MODULE(xml)
 #endif /* COMPILE_DL_XML */
 /* }}} */
+
+
+#define SKIP_TAGSTART(str) ((str) + (parser->toffset > strlen(str) ? strlen(str) : parser->toffset))
+
 
 /* {{{ function prototypes */
 PHP_MINIT_FUNCTION(xml);
@@ -111,7 +115,7 @@ ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_xml_set_object, 0, 0, 2)
 	ZEND_ARG_INFO(0, parser)
-	ZEND_ARG_INFO(1, obj)
+	ZEND_ARG_INFO(0, obj)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_xml_set_element_handler, 0, 0, 3)
@@ -483,9 +487,7 @@ static void xml_call_handler(xml_parser *parser, zval *handler, zend_function *f
 		zend_fcall_info fci;
 
 		fci.size = sizeof(fci);
-		fci.function_table = EG(function_table);
 		ZVAL_COPY_VALUE(&fci.function_name, handler);
-		fci.symbol_table = NULL;
 		fci.object = Z_OBJ(parser->object);
 		fci.retval = retval;
 		fci.param_count = argc;
@@ -500,7 +502,8 @@ static void xml_call_handler(xml_parser *parser, zval *handler, zend_function *f
 
 			if (Z_TYPE_P(handler) == IS_STRING) {
 				php_error_docref(NULL, E_WARNING, "Unable to call handler %s()", Z_STRVAL_P(handler));
-			} else if ((obj = zend_hash_index_find(Z_ARRVAL_P(handler), 0)) != NULL &&
+			} else if (Z_TYPE_P(handler) == IS_ARRAY &&
+					   (obj = zend_hash_index_find(Z_ARRVAL_P(handler), 0)) != NULL &&
 					   (method = zend_hash_index_find(Z_ARRVAL_P(handler), 1)) != NULL &&
 					   Z_TYPE_P(obj) == IS_OBJECT &&
 					   Z_TYPE_P(method) == IS_STRING) {
@@ -640,7 +643,7 @@ PHP_XML_API zend_string *xml_utf8_decode(const XML_Char *s, size_t len, const XM
 			c = '?';
 		}
 
-		ZSTR_VAL(str)[ZSTR_LEN(str)++] = decoder ? decoder(c) : c;
+		ZSTR_VAL(str)[ZSTR_LEN(str)++] = decoder ? (unsigned int)decoder(c) : c;
 	}
 	ZSTR_VAL(str)[ZSTR_LEN(str)] = '\0';
 	if (ZSTR_LEN(str) < len) {
@@ -728,7 +731,7 @@ void _xml_startElementHandler(void *userData, const XML_Char *name, const XML_Ch
 
 		if (!Z_ISUNDEF(parser->startElementHandler)) {
 			ZVAL_COPY(&args[0], &parser->index);
-			ZVAL_STRING(&args[1], ZSTR_VAL(tag_name) + parser->toffset);
+			ZVAL_STRING(&args[1], SKIP_TAGSTART(ZSTR_VAL(tag_name)));
 			array_init(&args[2]);
 
 			while (attributes && *attributes) {
@@ -759,7 +762,7 @@ void _xml_startElementHandler(void *userData, const XML_Char *name, const XML_Ch
 
 				_xml_add_to_info(parser, ZSTR_VAL(tag_name) + parser->toffset);
 
-				add_assoc_string(&tag, "tag", ZSTR_VAL(tag_name) + parser->toffset); /* cast to avoid gcc-warning */
+				add_assoc_string(&tag, "tag", SKIP_TAGSTART(ZSTR_VAL(tag_name))); /* cast to avoid gcc-warning */
 				add_assoc_string(&tag, "type", "open");
 				add_assoc_long(&tag, "level", parser->level);
 
@@ -813,7 +816,7 @@ void _xml_endElementHandler(void *userData, const XML_Char *name)
 
 		if (!Z_ISUNDEF(parser->endElementHandler)) {
 			ZVAL_COPY(&args[0], &parser->index);
-			ZVAL_STRING(&args[1], ZSTR_VAL(tag_name) + parser->toffset);
+			ZVAL_STRING(&args[1], SKIP_TAGSTART(ZSTR_VAL(tag_name)));
 
 			xml_call_handler(parser, &parser->endElementHandler, parser->endElementPtr, 2, args, &retval);
 			zval_ptr_dtor(&retval);
@@ -829,7 +832,7 @@ void _xml_endElementHandler(void *userData, const XML_Char *name)
 				  
 				_xml_add_to_info(parser, ZSTR_VAL(tag_name) + parser->toffset);
 
-				add_assoc_string(&tag, "tag", ZSTR_VAL(tag_name) + parser->toffset); /* cast to avoid gcc-warning */
+				add_assoc_string(&tag, "tag", SKIP_TAGSTART(ZSTR_VAL(tag_name))); /* cast to avoid gcc-warning */
 				add_assoc_string(&tag, "type", "close");
 				add_assoc_long(&tag, "level", parser->level);
 				  
@@ -866,7 +869,7 @@ void _xml_characterDataHandler(void *userData, const XML_Char *s, int len)
 		} 
 
 		if (!Z_ISUNDEF(parser->data)) {
-			int i;
+			size_t i;
 			int doprint = 0;
 			zend_string *decoded_value;
 
@@ -920,12 +923,12 @@ void _xml_characterDataHandler(void *userData, const XML_Char *s, int len)
 						break;
 					} ZEND_HASH_FOREACH_END();
 
-					if (parser->level <= XML_MAXLEVEL) {
+					if (parser->level <= XML_MAXLEVEL && parser->level > 0) {
 						array_init(&tag);
 
-						_xml_add_to_info(parser,parser->ltags[parser->level-1] + parser->toffset);
+						_xml_add_to_info(parser,SKIP_TAGSTART(parser->ltags[parser->level-1]));
 
-						add_assoc_string(&tag, "tag", parser->ltags[parser->level-1] + parser->toffset);
+						add_assoc_string(&tag, "tag", SKIP_TAGSTART(parser->ltags[parser->level-1]));
 						add_assoc_str(&tag, "value", decoded_value);
 						add_assoc_string(&tag, "type", "cdata");
 						add_assoc_long(&tag, "level", parser->level);
@@ -1169,7 +1172,7 @@ PHP_FUNCTION(xml_set_object)
 	xml_parser *parser;
 	zval *pind, *mythis;
 
-	if (zend_parse_parameters(ZEND_NUM_ARGS(), "ro/", &pind, &mythis) == FAILURE) {
+	if (zend_parse_parameters(ZEND_NUM_ARGS(), "ro", &pind, &mythis) == FAILURE) {
 		return;
 	}
 
@@ -1183,9 +1186,7 @@ PHP_FUNCTION(xml_set_object)
 	}
 
 	/* please leave this commented - or ask thies@thieso.net before doing it (again) */
-/* #ifdef ZEND_ENGINE_2
-	zval_add_ref(&parser->object); 
-#endif */
+	/* zval_add_ref(&parser->object); */
 
 	ZVAL_COPY(&parser->object, mythis);
 
@@ -1558,7 +1559,6 @@ PHP_FUNCTION(xml_parser_free)
 {
 	zval *pind;
 	xml_parser *parser;
-	zend_resource *res;
 
 	if (zend_parse_parameters(ZEND_NUM_ARGS(), "r", &pind) == FAILURE) {
 		return;
@@ -1573,9 +1573,10 @@ PHP_FUNCTION(xml_parser_free)
 		RETURN_FALSE;
 	}
 
-	res = Z_RES(parser->index);
-	ZVAL_UNDEF(&parser->index);
-	zend_list_close(res);
+	if (zend_list_delete(Z_RES(parser->index)) == FAILURE) {
+		RETURN_FALSE;
+	}
+
 	RETURN_TRUE;
 }
 /* }}} */
@@ -1604,6 +1605,10 @@ PHP_FUNCTION(xml_parser_set_option)
 		case PHP_XML_OPTION_SKIP_TAGSTART:
 			convert_to_long_ex(val);
 			parser->toffset = Z_LVAL_P(val);
+			if (parser->toffset < 0) {
+				php_error_docref(NULL, E_NOTICE, "tagstart ignored, because it is out of range");
+				parser->toffset = 0;
+			}
 			break;
 		case PHP_XML_OPTION_SKIP_WHITE:
 			convert_to_long_ex(val);

@@ -760,7 +760,7 @@ LOCAL (void)
   cinfo->colormap[2][icolor] = (JSAMPLE) ((c2total + (total >> 1)) / total);
 #else
   /* 2.0.16: Paul den Dulk found an occasion where total can be 0 */
-  if (count)
+  if (total)
     {
       nim->red[icolor] = (int) ((c0total + (total >> 1)) / total);
       nim->green[icolor] = (int) ((c1total + (total >> 1)) / total);
@@ -1329,7 +1329,7 @@ pass2_no_dither (j_decompress_ptr cinfo,
 	  /* If the pixel is transparent, we assign it the palette index that
 	   * will later be added at the end of the palette as the transparent
 	   * index. */
-	  if ((oim->transparent >= 0) && (oim->transparent == *(inptr - 1)))
+	  if ((oim->transparent >= 0) && (oim->transparent == *inptr))
 	    {
 	      *outptr++ = nim->colorsTotal;
 	      inptr++;

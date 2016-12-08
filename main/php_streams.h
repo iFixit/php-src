@@ -406,9 +406,6 @@ END_EXTERN_C()
 /* set or release lock on a stream */
 #define PHP_STREAM_OPTION_LOCKING		6
 
-/* Enable/disable blocking reads on anonymous pipes on Windows. */
-#define PHP_STREAM_OPTION_PIPE_BLOCKING 7
-
 /* whether or not locking is supported */
 #define PHP_STREAM_LOCK_SUPPORTED		1
 
@@ -437,6 +434,9 @@ END_EXTERN_C()
 /* Check if the stream is still "live"; for sockets/pipes this means the socket
  * is still connected; for files, this does not really have meaning */
 #define PHP_STREAM_OPTION_CHECK_LIVENESS	12 /* no parameters */
+
+/* Enable/disable blocking reads on anonymous pipes on Windows. */
+#define PHP_STREAM_OPTION_PIPE_BLOCKING 13
 
 #define PHP_STREAM_OPTION_RETURN_OK			 0 /* option set OK */
 #define PHP_STREAM_OPTION_RETURN_ERR		-1 /* problem setting option */
@@ -567,12 +567,6 @@ PHPAPI const char *php_stream_locate_eol(php_stream *stream, zend_string *buf);
 
 #define php_stream_open_wrapper(path, mode, options, opened)	_php_stream_open_wrapper_ex((path), (mode), (options), (opened), NULL STREAMS_CC)
 #define php_stream_open_wrapper_ex(path, mode, options, opened, context)	_php_stream_open_wrapper_ex((path), (mode), (options), (opened), (context) STREAMS_CC)
-
-#define php_stream_get_from_zval(stream, zstream, mode, options, opened, context) \
-		if (Z_TYPE_PP((zstream)) == IS_RESOURCE) { \
-			php_stream_from_zval((stream), (zstream)); \
-		} else (stream) = Z_TYPE_PP((zstream)) == IS_STRING ?  \
-			php_stream_open_wrapper_ex(Z_STRVAL_PP((zstream)), (mode), (options), (opened), (context)) : NULL
 
 /* pushes an error message onto the stack for a wrapper instance */
 PHPAPI void php_stream_wrapper_log_error(php_stream_wrapper *wrapper, int options, const char *fmt, ...) PHP_ATTRIBUTE_FORMAT(printf, 3, 4);
