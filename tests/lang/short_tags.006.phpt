@@ -18,17 +18,17 @@ class HtmlString {
     }
 }
 ?>
-<?= "this ampersand shouldn't be escaped: &" ?>
+<?= "this ampersand shouldn't be escaped when autoescaping is off: &" ?>
 
 <? ini_set("__auto_escape", 1) ?>
-<?= "   this ampersand should be escaped: &" ?>
+<?= "   this ampersand should be escaped when autoescaping is on: &" ?>
 
-<?= new HtmlString("this ampersand shouldn't be escaped: &") ?>
+<?= new HtmlString("this ampersand shouldn't be escaped when using an Exempt class: &") ?>
 <? ini_set("__auto_escape_exempt_class", "No Such Class") ?>
 
-<?= new HtmlString("   this ampersand should be escaped: &") ?>
+<?= new HtmlString("   this ampersand should be escaped when using a non-Exempt class: &") ?>
 --EXPECT--
-this ampersand shouldn't be escaped: &
-   this ampersand should be escaped: &amp;
-this ampersand shouldn't be escaped: &
-   this ampersand should be escaped: &amp;
+this ampersand shouldn't be escaped when autoescaping is off: &
+   this ampersand should be escaped when autoescaping is on: &amp;
+this ampersand shouldn't be escaped when using an Exempt class: &
+   this ampersand should be escaped when using a non-Exempt class: &amp;
