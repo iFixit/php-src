@@ -17,6 +17,8 @@ class HtmlString {
        return $this->html;
     }
 }
+
+function byRef(&$byRef) {}
 ?>
 <?= "this ampersand shouldn't be escaped when autoescaping is off: &" ?>
 
@@ -24,11 +26,15 @@ class HtmlString {
 <?= "   this ampersand should be escaped when autoescaping is on: &" ?>
 
 <?= new HtmlString("this ampersand shouldn't be escaped when using an Exempt class: &") ?>
-<? ini_set("__auto_escape_exempt_class", "No Such Class") ?>
 
+<? $html = new HtmlString("Passing an Exempt class by reference should leave this uescaped: &") ?>
+<? byRef($html); echo $html; ?>
+
+<? ini_set("__auto_escape_exempt_class", "No Such Class") ?>
 <?= new HtmlString("   this ampersand should be escaped when using a non-Exempt class: &") ?>
 --EXPECT--
 this ampersand shouldn't be escaped when autoescaping is off: &
    this ampersand should be escaped when autoescaping is on: &amp;
 this ampersand shouldn't be escaped when using an Exempt class: &
+Passing an Exempt class by reference should leave this uescaped: &
    this ampersand should be escaped when using a non-Exempt class: &amp;

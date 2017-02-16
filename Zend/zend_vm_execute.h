@@ -2699,6 +2699,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_CONST_HANDLER
 		if (ZSTR_LEN(str) != 0) {
 			// __auto_escape - If this is an object and it's not explicitly
 			// tagged as html, then use the escaping write function
+			ZVAL_DEREF(z);
 			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
 				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
 			} else {
@@ -34724,6 +34725,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_CV_HANDLER(ZE
 		if (ZSTR_LEN(str) != 0) {
 			// __auto_escape - If this is an object and it's not explicitly
 			// tagged as html, then use the escaping write function
+			ZVAL_DEREF(z);
 			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
 				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
 			} else {
@@ -51337,6 +51339,7 @@ static ZEND_OPCODE_HANDLER_RET ZEND_FASTCALL ZEND_ECHO_ESCAPE_SPEC_TMPVAR_HANDLE
 		if (ZSTR_LEN(str) != 0) {
 			// __auto_escape - If this is an object and it's not explicitly
 			// tagged as html, then use the escaping write function
+			ZVAL_DEREF(z);
 			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
 				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
 			} else {
