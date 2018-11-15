@@ -1,39 +1,21 @@
-The PHP Interpreter
+The iFixit PHP Interpreter
 ===================
 
-This is the github mirror of the official PHP repository located at
-https://git.php.net.
+This is our custom fork of php with a small feature added (autoescaping for html)
 
-[![Build Status](https://secure.travis-ci.org/php/php-src.svg?branch=master)](http://travis-ci.org/php/php-src)
-[![Build status](https://ci.appveyor.com/api/projects/status/meyur6fviaxgdwdy?svg=true)](https://ci.appveyor.com/project/php/php-src)
+Updating to a new version
+======================
 
-Pull Requests
-=============
-PHP accepts pull requests via github. Discussions are done on github, but
-depending on the topic can also be relayed to the official PHP developer
-mailing list internals@lists.php.net.
-
-New features require an RFC and must be accepted by the developers.
-See https://wiki.php.net/rfc and https://wiki.php.net/rfc/voting for more
-information on the process.
-
-Bug fixes **do not** require an RFC, but require a bugtracker ticket. Always
-open a ticket at https://bugs.php.net and reference the bug id using #NNNNNN.
-
-    Fix #55371: get_magic_quotes_gpc() throws deprecation warning
-
-    After removing magic quotes, the get_magic_quotes_gpc function caused
-    a deprecate warning. get_magic_quotes_gpc can be used to detected
-    the magic_quotes behavior and therefore should not raise a warning at any
-    time. The patch removes this warning
-
-We do not merge pull requests directly on github. All PRs will be
-pulled and pushed through https://git.php.net.
-
-
-Guidelines for contributors
-===========================
-- [CODING_STANDARDS](/CODING_STANDARDS)
-- [README.GIT-RULES](/README.GIT-RULES)
-- [README.MAILINGLIST_RULES](/README.MAILINGLIST_RULES)
-- [README.RELEASE_PROCESS](/README.RELEASE_PROCESS)
+1. Fetch the origin
+2. Create a new branch at the git tag of the php release we want to use
+3. Cherry-pick the commit that adds our feature
+   - Merging can be done too, but there are often far more conflicts
+4. Deal with conflicts (usually few)
+5. Ensure the copied (and slightly changed) functions in `Zend/zend_compile.c`
+   and `Zend/zend_vm_def.h` are just like their copied from counterparts.
+6. git add the changes and continue the cherry-pick.
+7. run `php Zend/zend_vm_gen.php` and commit the resultant files
+8. Build php (using the build script in our infrastructure repo) on this
+   branch.
+9. Try running some of the tests that have been added in our patch
+10. Open a pull here into the `ifixit-production` branch.
