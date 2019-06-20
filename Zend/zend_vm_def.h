@@ -1683,6 +1683,49 @@ ZEND_VM_HANDLER(136, ZEND_ECHO, CONST|TMPVAR|CV, ANY)
 	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
 }
 
+// This is copied from ZEND_ECHO above with only a small part different
+ZEND_VM_HANDLER(200, ZEND_ECHO_ESCAPE, CONST|TMPVAR|CV, ANY)
+{
+	USE_OPLINE
+	zval *z;
+
+	SAVE_OPLINE();
+	z = GET_OP1_ZVAL_PTR_UNDEF(BP_VAR_R);
+
+	if (Z_TYPE_P(z) == IS_STRING) {
+		zend_string *str = Z_STR_P(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			if (EG(__auto_escape)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+		}
+	} else {
+		zend_string *str = zval_get_string_func(z);
+
+		if (ZSTR_LEN(str) != 0) {
+			// ===== This part differs from ZEND_ECHO
+			// __auto_escape - If this is an object and it's not explicitly
+			// tagged as html, then use the escaping write function
+			ZVAL_DEREF(z);
+			if (EG(__auto_escape) && !(Z_TYPE_P(z) == IS_OBJECT && strcmp(ZSTR_VAL(Z_OBJ_P(z)->ce->name), EG(__auto_escape_exempt_class)) == 0)) {
+				zend_write_escape(ZSTR_VAL(str), ZSTR_LEN(str));
+			} else {
+				zend_write(ZSTR_VAL(str), ZSTR_LEN(str));
+			}
+			// ===== End differences from ZEND_ECHO
+		} else if (OP1_TYPE == IS_CV && UNEXPECTED(Z_TYPE_P(z) == IS_UNDEF)) {
+			ZVAL_UNDEFINED_OP1();
+		}
+		zend_string_release_ex(str, 0);
+	}
+
+	FREE_OP1();
+	ZEND_VM_NEXT_OPCODE_CHECK_EXCEPTION();
+}
+
 ZEND_VM_HELPER(zend_fetch_var_address_helper, CONST|TMPVAR|CV, UNUSED, int type)
 {
 	USE_OPLINE

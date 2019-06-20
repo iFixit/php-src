@@ -4827,6 +4827,19 @@ void zend_compile_echo(zend_ast *ast) /* {{{ */
 }
 /* }}} */
 
+void zend_compile_echo_escape(zend_ast *ast) /* {{{ */
+{
+	zend_op *opline;
+	zend_ast *expr_ast = ast->child[0];
+
+	znode expr_node;
+	zend_compile_expr(&expr_node, expr_ast);
+
+	opline = zend_emit_op(NULL, ZEND_ECHO_ESCAPE, &expr_node, NULL);
+	opline->extended_value = 0;
+}
+/* }}} */
+
 void zend_compile_throw(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_ast *expr_ast = ast->child[0];
@@ -8567,7 +8580,7 @@ void zend_compile_assign_coalesce(znode *result, zend_ast *ast) /* {{{ */
 }
 /* }}} */
 
-void zend_compile_print(znode *result, zend_ast *ast) /* {{{ */
+void zend_compile_print_escape(znode *result, zend_ast *ast) /* {{{ */
 {
 	zend_op *opline;
 	zend_ast *expr_ast = ast->child[0];
@@ -8575,7 +8588,7 @@ void zend_compile_print(znode *result, zend_ast *ast) /* {{{ */
 	znode expr_node;
 	zend_compile_expr(&expr_node, expr_ast);
 
-	opline = zend_emit_op(NULL, ZEND_ECHO, &expr_node, NULL);
+	opline = zend_emit_op(NULL, ZEND_ECHO_ESCAPE, &expr_node, NULL);
 	opline->extended_value = 1;
 
 	result->op_type = IS_CONST;
@@ -9382,6 +9395,9 @@ void zend_compile_stmt(zend_ast *ast) /* {{{ */
 		case ZEND_AST_RETURN:
 			zend_compile_return(ast);
 			break;
+		case ZEND_AST_ECHO_ESCAPE:
+			zend_compile_echo_escape(ast);
+			break;
 		case ZEND_AST_ECHO:
 			zend_compile_echo(ast);
 			break;
@@ -9550,7 +9566,7 @@ static void zend_compile_expr_inner(znode *result, zend_ast *ast) /* {{{ */
 			zend_compile_assign_coalesce(result, ast);
 			return;
 		case ZEND_AST_PRINT:
-			zend_compile_print(result, ast);
+			zend_compile_print_escape(result, ast);
 			return;
 		case ZEND_AST_EXIT:
 			zend_compile_exit(result, ast);
