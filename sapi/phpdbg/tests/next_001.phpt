@@ -19,7 +19,7 @@ prompt> 0
 >00005: }
  00006: 
  00007: foo();
-prompt> [L8 %s ECHO                    1                                                              %s]
+prompt> [L8 %s ECHO_ESCAPE             1                                                              %s]
 >00008: echo 1;
  00009: 
 prompt> 1
