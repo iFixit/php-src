@@ -28,9 +28,9 @@ prompt> ok
  00007: 		print "ok\n";
 prompt> >00010: 	print "caught\n";
  00011: }
- 00012: 
+ 00012:
 prompt> caught
->00014: 
+>00014:
 prompt>
 --FILE--
 <?php

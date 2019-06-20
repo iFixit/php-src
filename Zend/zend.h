@@ -245,6 +245,7 @@ typedef struct _zend_utility_functions {
 	void (*error_function)(int type, zend_string *error_filename, const uint32_t error_lineno, zend_string *message);
 	size_t (*printf_function)(const char *format, ...) ZEND_ATTRIBUTE_PTR_FORMAT(printf, 1, 2);
 	size_t (*write_function)(const char *str, size_t str_length);
+	size_t (*write_escape_function)(const char *str, size_t str_length);
 	FILE *(*fopen_function)(zend_string *filename, zend_string **opened_path);
 	void (*message_handler)(zend_long message, const void *data);
 	zval *(*get_configuration_directive)(zend_string *name);
@@ -339,6 +340,7 @@ END_EXTERN_C()
 BEGIN_EXTERN_C()
 extern ZEND_API size_t (*zend_printf)(const char *format, ...) ZEND_ATTRIBUTE_PTR_FORMAT(printf, 1, 2);
 extern ZEND_API zend_write_func_t zend_write;
+extern ZEND_API zend_write_func_t zend_write_escape;
 extern ZEND_API FILE *(*zend_fopen)(zend_string *filename, zend_string **opened_path);
 extern ZEND_API void (*zend_ticks_function)(int ticks);
 
