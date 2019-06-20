@@ -48,9 +48,9 @@ Loop::test:
      ; (lines=3, args=0, vars=0, tmps=0)
      ; (after optimizer)
      ; %sdce_009.php:4-10
-0000 ECHO string("Start
+0000 ECHO_ESCAPE string("Start
 ")
-0001 ECHO string("Done
+0001 ECHO_ESCAPE string("Done
 ")
 0002 RETURN null
 
