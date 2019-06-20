@@ -266,6 +266,10 @@ struct _zend_executor_globals {
 	uint32_t num_errors;
 	zend_error_info **errors;
 
+	zend_bool __auto_escape;
+	long __auto_escape_flags;
+	char *__auto_escape_exempt_class;
+
 	void *reserved[ZEND_MAX_RESERVED_RESOURCES];
 };
 
