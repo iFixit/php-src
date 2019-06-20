@@ -1862,6 +1862,21 @@ PHPAPI void php_com_initialize(void)
 }
 /* }}} */
 
+/* {{{ php_escape_write
+ */
+static size_t php_escape_write(const char *str, size_t str_length)
+{
+	size_t written;
+	zend_string *escaped;
+
+	escaped = php_escape_html_entities((unsigned char*)str, str_length, 0, EG(__auto_escape_flags), NULL);
+	written = php_output_write(ZSTR_VAL(escaped), ZSTR_LEN(escaped));
+	zend_string_free(escaped);
+	return written;
+}
+/* }}} */
+
+
 #ifdef ZTS
 /* {{{ core_globals_ctor */
 static void core_globals_ctor(php_core_globals *core_globals)
@@ -2030,6 +2045,7 @@ int php_module_startup(sapi_module_struct *sf, zend_module_entry *additional_mod
 	zuf.error_function = php_error_cb;
 	zuf.printf_function = php_printf;
 	zuf.write_function = php_output_write;
+	zuf.write_escape_function = php_escape_write;
 	zuf.fopen_function = php_fopen_wrapper_for_zend;
 	zuf.message_handler = php_message_handler_for_zend;
 	zuf.get_configuration_directive = php_get_configuration_directive_for_zend;
