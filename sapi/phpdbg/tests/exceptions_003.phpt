@@ -20,7 +20,7 @@ prompt> [L0 %s HANDLE_EXCEPTION                                                 
 >00005: 		x();
  00006: 	} finally {
  00007: 		print "ok\n";
-prompt> [L7 %s ECHO<1>                 "ok\n"                                                         %s]
+prompt> [L7       %s ECHO_ESCAPE<1>          "ok\n"                                                         %s]
 >00007: 		print "ok\n";
  00008: 	}
  00009: } catch (Error $e) {
@@ -30,7 +30,7 @@ prompt> ok
 >00005: 		x();
  00006: 	} finally {
  00007: 		print "ok\n";
-prompt> [L10 %s ECHO<1>                 "caught\n"                                                     %s]
+prompt> [L10      %s ECHO_ESCAPE<1>          "caught\n"                                                     %s]
 >00010: 	print "caught\n";
  00011: }
  00012: 

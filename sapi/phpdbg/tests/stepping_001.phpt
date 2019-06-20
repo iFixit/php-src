@@ -29,7 +29,7 @@ prompt> [L0 %s HANDLE_EXCEPTION                                                 
 >00008: 	foo();
  00009: } catch (Exception $e) {
  00010: 	echo "ok";
-prompt> [L10 %s ECHO                    "ok"                                                           %s]
+prompt> [L10      %s ECHO_ESCAPE             "ok"                                                           %s]
 >00010: 	echo "ok";
  00011: } finally {
  00012: 	echo " ... ok";
@@ -38,7 +38,7 @@ prompt> ok
 >00011: } finally {
  00012: 	echo " ... ok";
  00013: }
-prompt> [L12 %s ECHO                    " ... ok"                                                      %s]
+prompt> [L12      %s ECHO_ESCAPE             " ... ok"                                                      %s]
 >00012: 	echo " ... ok";
  00013: }
  00014: 
