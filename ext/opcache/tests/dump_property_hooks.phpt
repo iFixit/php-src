@@ -58,7 +58,7 @@ A::$prop::set:
      ; %sdump_property_hooks.php:9-13
 0000 CV0($value) = RECV 1
 0001 T1 = FAST_CONCAT string("Setting ") CV0($value)
-0002 ECHO T1
+0002 ECHO_ESCAPE T1
 0003 RETURN null
 int(42)
 Setting 41

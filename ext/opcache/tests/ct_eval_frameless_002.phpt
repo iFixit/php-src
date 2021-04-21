@@ -18,7 +18,7 @@ $_main:
      ; (after optimizer)
      ; %sct_eval_frameless_002.php:1-4
 0000 CHECK_VAR CV0($foo)
-0001 ECHO string("o")
+0001 ECHO_ESCAPE string("o")
 0002 RETURN int(1)
 
 Warning: Undefined variable $foo in %s on line %d

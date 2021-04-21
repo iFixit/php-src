@@ -34,6 +34,6 @@ foo:
      ; (lines=3, args=0, vars=0, tmps=0)
      ; (after optimizer)
      ; %ssccp_003.php:2-12
-0000 ECHO string("1")
-0001 ECHO string("1")
+0000 ECHO_ESCAPE string("1")
+0001 ECHO_ESCAPE string("1")
 0002 RETURN null

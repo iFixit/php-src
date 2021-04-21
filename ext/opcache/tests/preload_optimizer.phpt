@@ -38,6 +38,6 @@ $_main:
      ; (lines=2, args=0, vars=0, tmps=%d)
      ; (after optimizer)
      ; %spreload_optimizer.php:1-4
-0000 ECHO string("42")
+0000 ECHO_ESCAPE string("42")
 0001 RETURN int(1)
 42

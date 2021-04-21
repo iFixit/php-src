@@ -40,7 +40,7 @@ foo:
 0002 OP_DATA CV0($x)
 0003 ASSIGN_DIM CV1($a) int(1)
 0004 OP_DATA int(5)
-0005 ECHO string("5")
+0005 ECHO_ESCAPE string("5")
 0006 ASSIGN_OBJ CV1($a) string("foo")
 0007 OP_DATA int(5)
 0008 T2 = FETCH_DIM_R CV1($a) int(1)
