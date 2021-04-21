@@ -35,6 +35,6 @@ foo:
      ; (after optimizer)
      ; %ssccp_002.php:2-12
 0000 CV0($x) = RECV 1
-0001 ECHO string("1")
-0002 ECHO string("1")
+0001 ECHO_ESCAPE string("1")
+0002 ECHO_ESCAPE string("1")
 0003 RETURN null
