@@ -300,6 +300,7 @@ int zend_optimizer_update_op1_const(zend_op_array *op_array,
 		case ZEND_COPY_TMP:
 		case ZEND_FETCH_CLASS_NAME:
 			return 0;
+		case ZEND_ECHO_ESCAPE:
 		case ZEND_ECHO:
 		{
 			zval zv;
