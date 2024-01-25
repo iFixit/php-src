@@ -304,7 +304,7 @@ struct _zend_executor_globals {
 	struct sigaction oldact;
 #endif
 
-	zend_bool __auto_escape;
+	bool __auto_escape;
 	long __auto_escape_flags;
 	char *__auto_escape_exempt_class;
 
