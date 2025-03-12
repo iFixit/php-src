@@ -19,3 +19,11 @@ Updating to a new version
    branch.
 9. Try running some of the tests that have been added in our patch
 10. Open a pull here into the `ifixit-production` branch.
+
+### Script
+
+Try using this script, it may work automatically for this process, if there are
+no conflicts:
+```sh
+./ifixit-patch-php.sh <PHP release to patch>
+```
