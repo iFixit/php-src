@@ -17,6 +17,6 @@ $_main:
      ; (lines=2, args=0, vars=0, tmps=0)
      ; (after optimizer)
      ; %sct_eval_frameless_001.php:1-4
-0000 ECHO string("%sopcache")
+0000 ECHO_ESCAPE string("%sopcache")
 0001 RETURN int(1)
 %sopcache
