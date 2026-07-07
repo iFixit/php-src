@@ -44,7 +44,7 @@ test:
      ; (lines=2, args=0, vars=0, tmps=0)
      ; (after optimizer)
      ; %s
-0000 ECHO string("No match
+0000 ECHO_ESCAPE string("No match
 ")
 0001 RETURN null
 
@@ -52,7 +52,7 @@ test2:
      ; (lines=2, args=0, vars=0, tmps=0)
      ; (after optimizer)
      ; %s
-0000 ECHO string("No match
+0000 ECHO_ESCAPE string("No match
 ")
 0001 RETURN null
 No match
