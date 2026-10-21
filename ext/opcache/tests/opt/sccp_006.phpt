@@ -33,7 +33,7 @@ foo:
 0003 T2 = ADD_ARRAY_ELEMENT CV0($x) string("a")
 0004 CV1($a) = QM_ASSIGN T2
 0005 T2 = FETCH_DIM_R CV1($a) string("a")
-0006 ECHO T2
+0006 ECHO_ESCAPE T2
 0007 RETURN null
 LIVE RANGES:
      2: 0002 - 0004 (tmp/var)
