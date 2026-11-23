@@ -37,7 +37,7 @@ $_main:
 0004 DO_FCALL
 0005 THROW V4
 0006 CV1($e) = CATCH string("Throwable")
-0007 ECHO string("foo")
+0007 ECHO_ESCAPE string("foo")
 0008 T6 = FAST_CALL 0010
 0009 JMP 0015
 0010 V7 = NEW 1 string("Exception")

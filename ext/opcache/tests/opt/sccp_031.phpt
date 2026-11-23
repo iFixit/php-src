@@ -33,7 +33,7 @@ foo:
      ; (lines=4, args=0, vars=0, tmps=0)
      ; (after optimizer)
      ; %s_031.php:2-11
-0000 ECHO string("b")
-0001 ECHO string("c")
-0002 ECHO array(...)
+0000 ECHO_ESCAPE string("b")
+0001 ECHO_ESCAPE string("c")
+0002 ECHO_ESCAPE array(...)
 0003 RETURN null
